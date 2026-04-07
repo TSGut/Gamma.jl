@@ -1,6 +1,6 @@
 # Gamma.jl
-[![Build Status](https://github.com/JuliaMath/Gamma.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/JuliaMath/Gamma.jl/actions/workflows/CI.yml?query=branch%3Amaster)
-[![Coverage](https://codecov.io/gh/JuliaMath/Gamma.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaMath/Gamma.jl)
+[![Build Status](https://github.com/JuliaMath/Gamma.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/JuliaMath/Gamma.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/JuliaMath/Gamma.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/JuliaMath/Gamma.jl)
 
 Simple and fast Gamma function.
 

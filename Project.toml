@@ -1,0 +1,15 @@
+name = "Gamma"
+uuid = "a0844989-3bd2-4988-8bea-c9407ab0941b"
+version = "1.0"
+
+[deps]
+
+[compat]
+julia = "1.10"
+
+[extras]
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["SpecialFunctions", "Test"]

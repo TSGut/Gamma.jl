@@ -22,4 +22,12 @@ x = [0, 1, 2, 3, 8, 15, 20, 30]
 @test SpecialFunctions.gamma.(x) ≈ gamma.(x)
 @inferred gamma(1)
 
+# gamma_near_1 exact at expansion point (constant term = Γ(1) = 1)
+@test Gamma.gamma_near_1(1.0) === 1.0
+# nearby values: degree-3 Taylor gives O((x-1)^4) error,
+# ≲ 1e-4 for |x-1| ≤ 0.1
+for x in (0.90, 0.95, 1.0, 1.05, 1.10)
+    @test Gamma.gamma_near_1(x) ≈ gamma(x) atol=1e-3
+end
+
 include("test_loggamma.jl")

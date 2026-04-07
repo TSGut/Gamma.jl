@@ -21,3 +21,5 @@ end
 x = [0, 1, 2, 3, 8, 15, 20, 30]
 @test SpecialFunctions.gamma.(x) ≈ gamma.(x)
 @inferred gamma(1)
+
+include("test/test_loggamma.jl")

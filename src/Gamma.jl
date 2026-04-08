@@ -1,6 +1,6 @@
 module Gamma
 
-    include("core.jl")
+    include("gamma_implementation.jl")
     include("precompile.jl")
     include("loggamma.jl")
 

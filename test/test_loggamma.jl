@@ -1,4 +1,3 @@
-
 using Gamma: gamma, loggamma, logabsgamma, logfactorial, _loggamma_oracle64_point
 
 @testset "logfactorial" begin

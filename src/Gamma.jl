@@ -1,8 +1,9 @@
 module Gamma
 
-include("gamma.jl")
-include("precompile.jl")
+    include("gamma_implementation.jl")
+    include("precompile.jl")
+    include("loggamma.jl")
 
-export gamma
+    export gamma, loggamma, logabsgamma, logfactorial
 
 end

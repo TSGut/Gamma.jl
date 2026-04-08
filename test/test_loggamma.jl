@@ -46,6 +46,15 @@ end
     # real loggamma should throw for negative gamma
     @test_throws DomainError loggamma(-0.5)
     @test loggamma(-1.5) == logabsgamma(-1.5)[1]
+    # Float32 versions
+    @test logabsgamma(0.0f0) == (Float32(Inf), 1)
+    @test logabsgamma(-0.0f0) == (Float32(Inf), -1)
+    @test logabsgamma(-1.0f0) == (Float32(Inf), 1)
+    @test logabsgamma(-2.0f0) == (Float32(Inf), 1)
+    @test isnan(logabsgamma(Float32(NaN))[1])
+    @test logabsgamma(Float32(NaN))[2] == 1
+    @test_throws DomainError loggamma(-0.5f0)
+    @test loggamma(-1.5f0) == logabsgamma(-1.5f0)[1]
 end
 
 

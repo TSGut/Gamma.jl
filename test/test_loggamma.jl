@@ -63,9 +63,11 @@ end
 
     # complex loggamma edge cases and SpecialFunctions consistency
     @test loggamma(Complex(Inf, 0.0)) == Complex(Inf, 0.0)
+    @test loggamma(Complex{Float32}(Inf, 0.0)) == Complex{Float32}(Inf, 0.0)
     @test all(isnan, reim(loggamma(Complex(NaN, NaN))))
     @test loggamma(Complex(0.0, 0.0)) === Complex(Inf, -0.0)
     @test loggamma(Complex(-0.0, 0.0)) == Complex(Inf, -Float64(π))
+    @test loggamma(Complex{Float32}(-0.0, 0.0)) == Complex{Float32}(Inf, -Float32(π))
 
     # Map Complex{Int64} to Complex{Float64} for loggamma tests
     @test loggamma(Complex{Int64}(-300)) ≈ loggamma(Complex{Float64}(-300))
@@ -216,6 +218,16 @@ end
         @test loggamma(Inf*im) === -Inf + Inf*im
         @test loggamma(-Inf*im) === -Inf - Inf*im
         @test loggamma(Inf + Inf*im) === loggamma(NaN + 0im) === loggamma(NaN*im) === NaN + NaN*im
+        # Float32
+        @test loggamma(Complex{Float32}(Inf + 0im)) === Complex{Float32}(Inf + 0im)
+        @test loggamma(Complex{Float32}(Inf - 0.0im)) === Complex{Float32}(Inf - 0.0im)
+        @test loggamma(Complex{Float32}(Inf + 1im)) === Complex{Float32}(Inf + Inf*im)
+        @test loggamma(Complex{Float32}(Inf - 1im)) === Complex{Float32}(Inf - Inf*im)
+        @test loggamma(Complex{Float32}(-Inf + 0.0im)) === Complex{Float32}(-Inf - Inf*im)
+        @test loggamma(Complex{Float32}(-Inf - 0.0im)) === Complex{Float32}(-Inf + Inf*im)
+        @test loggamma(Complex{Float32}(Inf*im)) === Complex{Float32}(-Inf + Inf*im)
+        @test loggamma(Complex{Float32}(-Inf*im)) === Complex{Float32}(-Inf - Inf*im)
+        @test loggamma(Complex{Float32}(Inf + Inf*im)) === loggamma(Complex{Float32}(NaN + 0im)) === loggamma(Complex{Float32}(NaN*im)) === Complex{Float32}(NaN + NaN*im)
     end
 
     @testset "BigFloat" begin

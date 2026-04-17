@@ -83,6 +83,15 @@ end
     @test loggamma(-1.5f0) == logabsgamma(-1.5f0)[1]
 end
 
+@testset "loggamma negative-integer poles" begin
+    for T in (Float16, Float32, Float64)
+        @test loggamma(T(-1.0)) == T(Inf)
+        @test loggamma(T(-2.0)) == T(Inf)
+    end
+
+    # integer input maps to Float64
+    @test loggamma(-1) == Float64(Inf)
+end
 
 @testset "Complex Loggamma" begin
     # complex loggamma randomized tests: 10000 samples per floating-point type

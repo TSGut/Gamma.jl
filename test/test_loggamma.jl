@@ -1,5 +1,31 @@
 using Gamma: gamma, loggamma, logabsgamma, logfactorial, _loggamma_oracle64_point
 
+# Type checks for loggamma
+@testset "loggamma type inference" begin
+    for T in (Float16, Float32, Float64)
+        @inferred loggamma(one(T))
+    end
+    @inferred loggamma(1)
+    @inferred loggamma(Complex{Float64}(1.0, 0.0))
+    @inferred loggamma(Complex{Float32}(1.0f0, 0.0f0))
+end
+
+@testset "loggamma type assertions" begin
+    # exact return types for real inputs
+    for T in (Float16, Float32, Float64)
+        @test typeof(loggamma(one(T))) === T
+    end
+
+    # exact return types for complex inputs
+    @test typeof(loggamma(Complex{Float64}(1.0, 0.0))) === Complex{Float64}
+    @test typeof(loggamma(Complex{Float32}(1.0f0, 0.0f0))) === Complex{Float32}
+    @test typeof(loggamma(Complex{Float16}(Float16(1.0), Float16(0.0)))) === Complex{Float16}
+
+    # BigFloat checks
+    @test typeof(loggamma(big"1.0")) === BigFloat
+    @test typeof(loggamma(Complex{BigFloat}(big"1.0", big"0.0"))) === Complex{BigFloat}
+end
+
 @testset "logfactorial" begin
     @test logfactorial(0) ≈ 0.0 atol=5eps(Float64)
     for n in (1, 2, 3, 10, 50)

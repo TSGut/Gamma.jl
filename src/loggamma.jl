@@ -16,62 +16,45 @@ but may differ from `log(gamma(x))` by an integer multiple of ``2\\pi i``.
 
 External links: [DLMF](https://dlmf.nist.gov/5.4), [Wikipedia](https://en.wikipedia.org/wiki/Gamma_function#The_log-gamma_function)
 """
-loggamma(x::Float64) = _loggamma(x)
-loggamma(x::Float32) = _loggamma(x)
-loggamma(x::Float16) = Float16(_loggamma(Float32(x)))
-loggamma(x::Rational) = loggamma(float(x))
-loggamma(x::Integer) = loggamma(float(x))
-loggamma(z::Complex{Float64}) = _loggamma(z)
-loggamma(z::Complex{Float32}) = _loggamma(z)
-loggamma(z::Complex{Float16}) = Complex{Float16}(_loggamma(Complex{Float32}(z)))
-loggamma(z::Complex{<:Integer}) = _loggamma(Complex{Float64}(z))
-loggamma(z::Complex{<:Rational}) = loggamma(float(z))
-function loggamma(x::BigFloat)
-    # For now we use the same implementation for BigFloat as Complex{BigFloat}. This is not ideal since it does more work than necessary.
-    if isnan(x)
-        return x
-    elseif isinf(x)
-        return x > 0 ? x : BigFloat(NaN)
-    elseif x <= 0
-        x == 0 && return BigFloat(Inf)
-        isinteger(x) && return BigFloat(Inf)  # negative integer pole
-        y, sgn = _logabsgamma(x)
-        sgn < 0 && throw(DomainError(x, "`gamma(x)` must be non-negative"))
-        return y
-    end
-    return real(_loggamma_complex_bigfloat(Complex{BigFloat}(x, zero(BigFloat))))
-end
-loggamma(z::Complex{BigFloat}) = _loggamma(z)
-
-"""
-    logfactorial(x)
-
-Compute the logarithmic factorial of a nonnegative integer `x` via loggamma.
-"""
-logfactorial(x::Integer) = x < 0 ? throw(DomainError(x, "`x` must be non-negative.")) : loggamma(float(x + oneunit(x)))
-
-"""
-    logabsgamma(x::Real)
-
-Returns a tuple `(log(abs(Γ(x))), sign(Γ(x)))` for real `x`.
-"""
-logabsgamma(x::Float32) = _logabsgamma(x)
-logabsgamma(x::Real) = _logabsgamma(float(x))
-function logabsgamma(x::Float16)
-    y, s = _logabsgamma(Float32(x))
-    return Float16(y), s
-end
-
-
 ####################################
-## Float64 loggamma implementation
+## Constants and typed getters
 ####################################
-
 const HALF_LOG2PI_F64 = 9.1893853320467274178032927e-01
 const LOGPI_F64 = 1.1447298858494002
 const TWO_PI_F64 = 6.2831853071795864769252842
 
-# Taylor series coefficients for complex loggamma at z=1 and z=2 (Float64)
+const HALF_LOG2PI_F32 = 9.1893853320467274178032927f-01
+const LOGPI_F32 = 1.1447298858494002f0
+const TWO_PI_F32 = 6.2831853071795864769252842f0
+
+const _STIRLING_COEFFS_32 = (
+    8.333333333333333333333368f-02, -2.777777777777777777777778f-03,
+    7.936507936507936507936508f-04, -5.952380952380952380952381f-04,
+    8.417508417508417508417510f-04
+)
+
+const _STIRLING_COEFFS_64 = (
+    8.333333333333333333333368e-02, -2.777777777777777777777778e-03,
+    7.936507936507936507936508e-04, -5.952380952380952380952381e-04,
+    8.417508417508417508417510e-04, -1.917526917526917526917527e-03,
+    6.410256410256410256410257e-03, -2.955065359477124183006535e-02
+)
+
+const _TAYLOR1_32 = (
+    -5.7721566490153286060651188f-01, 8.2246703342411321823620794f-01,
+    -4.0068563438653142846657956f-01, 2.705808084277845478790009f-01,
+    -2.0738555102867398526627303f-01, 1.6955717699740818995241986f-01,
+    -1.4404989676884611811997107f-01, 1.2550966952474304242233559f-01,
+    -1.1133426586956469049087244f-01, 1.000994575127818085337147f-01
+)
+
+const _TAYLOR2_32 = (
+    4.2278433509846713939348812f-01, 3.2246703342411321823620794f-01,
+    -6.7352301053198095133246196f-02, 2.0580808427784547879000897f-02,
+    -7.3855510286739852662729527f-03, 2.8905103307415232857531201f-03,
+    -1.1927539117032609771139825f-03, 5.0966952474304242233558822f-04
+)
+
 const _TAYLOR1_64 = (
     -5.7721566490153286060651188e-01, 8.2246703342411321823620794e-01,
     -4.0068563438653142846657956e-01, 2.705808084277845478790009e-01,
@@ -92,198 +75,148 @@ const _TAYLOR2_64 = (
     -4.4926236738133141700224489e-05, 2.0507212775670691553131246e-05
 )
 
-# Stirling asymptotic series for log(Γ(x)), valid for x > 0 sufficiently large
-# coefficients are bernoulli[2k] / (2k*(2k-1)) for k = 1,...,8
+# Typed coefficient getters
+_stirling_coeffs(::Type{Float64}) = _STIRLING_COEFFS_64
+_taylor1(::Type{Float64}) = _TAYLOR1_64
+_taylor2(::Type{Float64}) = _TAYLOR2_64
+_stirling_coeffs(::Type{Float32}) = _STIRLING_COEFFS_32
+_taylor1(::Type{Float32}) = _TAYLOR1_32
+_taylor2(::Type{Float32}) = _TAYLOR2_32
 
-const _STIRLING_COEFFS_64 = (
-    8.333333333333333333333368e-02, -2.777777777777777777777778e-03,
-    7.936507936507936507936508e-04, -5.952380952380952380952381e-04,
-    8.417508417508417508417510e-04, -1.917526917526917526917527e-03,
-    6.410256410256410256410257e-03, -2.955065359477124183006535e-02
-)
-function _loggamma_stirling(x::Float64)
+# Typed constant getters
+_half_log2pi(::Type{Float64}) = HALF_LOG2PI_F64
+_half_log2pi(::Type{Float32}) = HALF_LOG2PI_F32
+_logpi(::Type{Float64}) = LOGPI_F64
+_logpi(::Type{Float32}) = LOGPI_F32
+_two_pi(::Type{Float64}) = TWO_PI_F64
+_two_pi(::Type{Float32}) = TWO_PI_F32
+
+# Generic loggamma entry points
+loggamma(x::Float64) = _loggamma(x)
+loggamma(x::Float32) = _loggamma(x)
+loggamma(x::Float16) = Float16(_loggamma(Float32(x)))
+loggamma(x::Rational) = loggamma(float(x))
+loggamma(x::Integer) = loggamma(float(x))
+loggamma(z::Complex{Float64}) = _loggamma(z)
+loggamma(z::Complex{Float32}) = _loggamma(z)
+loggamma(z::Complex{Float16}) = Complex{Float16}(_loggamma(Complex{Float32}(z)))
+loggamma(z::Complex{<:Integer}) = _loggamma(Complex{Float64}(z))
+loggamma(z::Complex{<:Rational}) = loggamma(float(z))
+function loggamma(x::BigFloat)
+    # For now we use the same implementation for BigFloat as Complex{BigFloat}. This is not ideal since it does more work than necessary.
+    if isnan(x)
+        return x
+    elseif isinf(x)
+        return x > 0 ? x : BigFloat(NaN)
+    elseif x <= 0
+        iszero(x) && return BigFloat(Inf)
+        isinteger(x) && return BigFloat(Inf)  # negative integer pole
+        y, sgn = _logabsgamma(x)
+        sgn < 0 && throw(DomainError(x, "`gamma(x)` must be non-negative"))
+        return y
+    end
+    return real(_loggamma_complex_bigfloat(Complex{BigFloat}(x, zero(BigFloat))))
+end
+loggamma(z::Complex{BigFloat}) = _loggamma(z)
+
+"""
+    logfactorial(x)
+
+Compute the logarithmic factorial of a nonnegative integer `x` via loggamma.
+"""
+function logfactorial(x::Integer)
+    if x < 0
+        throw(DomainError(x, "`x` must be non-negative."))
+    end
+    return loggamma(float(x + oneunit(x)))
+end
+
+####################################
+## Float64 / Float32 loggamma and logabsgamma implementations
+####################################
+
+"""
+    logabsgamma(x::Real)
+
+Returns a tuple `(log(abs(Γ(x))), sign(Γ(x)))` for real `x`.
+"""
+logabsgamma(x::Float32) = _logabsgamma(x)
+logabsgamma(x::Real) = _logabsgamma(float(x))
+function logabsgamma(x::Float16)
+    y, s = _logabsgamma(Float32(x))
+    return Float16(y), s
+end
+
+function _logabsgamma(x::T) where T<:Union{Float32,Float64}
+    if isnan(x)
+        return x, 1
+    elseif x > zero(x)
+        return _loggamma_unsafe_pos(x), 1
+    elseif iszero(x)
+        return T(Inf), Int(sign(1 / x))
+    else
+        s = sinpi(x)
+        iszero(s) && return T(Inf), 1
+        sgn = signbit(s) ? -1 : 1
+        return _logpi(T) - log(abs(s)) - _loggamma(T(1) - x), sgn
+    end
+end
+
+# Generic unsafe-positive loggamma
+function _loggamma_unsafe_pos(x::T) where T<:Union{Float32,Float64}
+    if x < 7
+        n = 7 - floor(Int, x)
+        z = x
+        prod = one(x)
+        for i in 0:n-1
+            prod *= z + i
+        end
+        return _loggamma_stirling(z + n) - log(prod)
+    else
+        return _loggamma_stirling(x)
+    end
+end
+
+# logabsgamma without safety checks (used to avoid double checks)
+function _logabsgamma_unsafe_sub0(x::T) where T<:Union{Float32,Float64}
+    s = sinpi(x)
+    iszero(s) && return T(Inf), 1
+    sgn = signbit(s) ? -1 : 1
+    return _logpi(T) - log(abs(s)) - _loggamma(T(1) - x), sgn
+end
+
+function _loggamma_stirling(x::T) where T<:Union{Float32,Float64}
     t = inv(x)
     w = t * t
-    return muladd(x - 0.5, log(x), -x + HALF_LOG2PI_F64 +  # log(2π)/2
-        t * @evalpoly(w, _STIRLING_COEFFS_64...)
+    return muladd(x - one(T)/2, log(x), -x + _half_log2pi(T) +
+        t * @evalpoly(w, _stirling_coeffs(T)...)
     )
 end
 
 # Asymptotic series for log(Γ(z)) for complex z with sufficiently large real(z) or |imag(z)|
-function _loggamma_asymptotic(z::Complex{Float64})
+function _loggamma_asymptotic(z::Complex{T}) where T<:Union{Float32,Float64}
     zinv = inv(z)
     t = zinv * zinv
-    return (z - 0.5) * log(z) - z + HALF_LOG2PI_F64 +  # log(2π)/2
-        zinv * @evalpoly(t, _STIRLING_COEFFS_64...)
+    return (z - one(T)/2) * log(z) - z + _half_log2pi(T) +  # log(2π)/2
+        zinv * @evalpoly(t, _stirling_coeffs(T)...)
 end
 
-function _logabsgamma(x::Float64)
-    if isnan(x)
-        return x, 1
-    elseif x > 0
-        return _loggamma_unsafe_pos(x), 1
-    elseif x == 0
-        return Inf, Int(sign(1/x))  # ±0 → correct sign
-    else
-        # reflection formula: Γ(x) = π / (sin(πx) * Γ(1-x))
-        s = sinpi(x)
-        s == 0 && return Inf, 1
-        sgn = signbit(s) ? -1 : 1
-        return LOGPI_F64 - log(abs(s)) - _loggamma(1.0 - x), sgn
-    end
-end
-
-# Version of logabsgamma for Float64 without input checks, used for loggamma reduction to avoid double checks
-function _logabsgamma_unsafe_sub0(x::Float64)
-    # Since this is only used from loggamma, we can assume x < 0 is a clean input
-    s = sinpi(x)
-    s == 0 && return Inf, 1
-    sgn = signbit(s) ? -1 : 1
-    return LOGPI_F64 - log(abs(s)) - _loggamma(1.0 - x), sgn
-end
-
-# loggamma for real Float64
-function _loggamma(x::Float64)
+function _loggamma(x::T) where T<:Union{Float32,Float64}
     if isnan(x)
         return x
     elseif isinf(x)
-        return x > 0 ? Inf : NaN
+        return (x > 0 ? T(Inf) : T(NaN))
     elseif x ≤ 0
-        x == 0 && return Inf
-        isinteger(x) && return Inf  # negative integer pole
-        # reflection: log|Γ(x)| = log(π) - log|sin(πx)| - log(Γ(1-x))
-        # but loggamma for real requires Γ(x)>0
-        y, sgn = _logabsgamma_unsafe_sub0(x)
-        sgn < 0 && throw(DomainError(x, "`gamma(x)` must be non-negative"))
-        return y
-    elseif x < 7
-        # shift x into asymptotic region [7,∞)
-        n = 7 - floor(Int, x)
-        z = x
-        prod = one(x)
-        for i in 0:n-1
-            prod *= z + i
-        end
-        return _loggamma_stirling(z + n) - log(prod)
-    else
-        return _loggamma_stirling(x)
-    end
-end
-
-# loggamma for positive x without checks, used for logabsgamma reduction to avoid double checks
-function _loggamma_unsafe_pos(x::Float64)
-    if x < 7
-        # shift x into asymptotic region [7,∞)
-        n = 7 - floor(Int, x)
-        z = x
-        prod = one(x)
-        for i in 0:n-1
-            prod *= z + i
-        end
-        return _loggamma_stirling(z + n) - log(prod)
-    else
-        return _loggamma_stirling(x)
-    end
-end
-
-
-####################################
-## Complex{Float64} loggamma implementation
-####################################
-# Combines the asymptotic series, Taylor series at z=1 and z=2,
-# the reflection formula, and the shift recurrence.
-function _loggamma(z::Complex{Float64})
-    x, y = reim(z)
-    yabs = abs(y)
-
-    if !isfinite(x) || !isfinite(y)
-        if isinf(x) && isfinite(y)
-            return Complex(x, x > 0 ? (y == 0 ? y : copysign(Inf, y)) : copysign(Inf, -y))
-        elseif isfinite(x) && isinf(y)
-            return Complex(-Inf, y)
+        if iszero(x)
+            return T(Inf)
+        elseif isinteger(x)
+            return T(Inf)
         else
-            return Complex(NaN, NaN)
+            y, sgn = _logabsgamma_unsafe_sub0(x)
+            sgn < 0 && throw(DomainError(x, "`gamma(x)` must be non-negative"))
+            return y
         end
-    elseif x > 7 || yabs > 7
-        return _loggamma_asymptotic(z)
-    elseif x < 0.1
-        if x == 0 && y == 0
-            return Complex(Inf, signbit(x) ? copysign(Float64(π), -y) : -y)
-        end
-        # reflection formula with correct branch cut.
-        return Complex(LOGPI_F64, copysign(TWO_PI_F64, y) * floor(0.5 * x + 0.25)) -
-            log(sinpi(z)) - _loggamma(1 - z)
-    elseif abs(x - 1) + yabs < 0.1
-        # Taylor series at z=1
-        # coefficients: [-γ; [(-1)^k * ζ(k)/k for k in 2:15]]
-        w = Complex(x - 1, y)
-            return w * @evalpoly(w, _TAYLOR1_64...)
-    elseif abs(x - 2) + yabs < 0.1
-        # Taylor series at z=2
-        # coefficients: [1-γ; [(-1)^k * (ζ(k)-1)/k for k in 2:12]]
-        w = Complex(x - 2, y)
-        return w * @evalpoly(w, _TAYLOR2_64...)
-    else
-        # shift using recurrence: loggamma(z) = loggamma(z+n) - log(∏(z+k))
-        shiftprod = Complex(x, yabs)
-        x += 1
-        sb = false
-        signflips = 0
-        while x ≤ 7
-            shiftprod *= Complex(x, yabs)
-            sb′ = signbit(imag(shiftprod))
-            signflips += sb′ & (sb′ != sb)
-            sb = sb′
-            x += 1
-        end
-        shift = log(shiftprod)
-        if signbit(y)
-            shift = Complex(real(shift), signflips * -TWO_PI_F64 - imag(shift))
-        else
-            shift = Complex(real(shift), imag(shift) + signflips * TWO_PI_F64)
-        end
-        return _loggamma_asymptotic(Complex(x, y)) - shift
     end
-end
-
-####################################
-## Float32 loggamma implementation
-####################################
-
-const HALF_LOG2PI_F32 = 9.1893853320467274178032927f-01
-const LOGPI_F32 = 1.1447298858494002f0
-const TWO_PI_F32 = 6.2831853071795864769252842f0
-
-const _STIRLING_COEFFS_32 = (
-    8.333333333333333333333368f-02, -2.777777777777777777777778f-03,
-    7.936507936507936507936508f-04, -5.952380952380952380952381f-04,
-    8.417508417508417508417510f-04
-)
-
-const _TAYLOR1_32 = (
-    -5.7721566490153286060651188f-01, 8.2246703342411321823620794f-01,
-    -4.0068563438653142846657956f-01, 2.705808084277845478790009f-01,
-    -2.0738555102867398526627303f-01, 1.6955717699740818995241986f-01,
-    -1.4404989676884611811997107f-01, 1.2550966952474304242233559f-01,
-    -1.1133426586956469049087244f-01, 1.000994575127818085337147f-01
-)
-
-const _TAYLOR2_32 = (
-    4.2278433509846713939348812f-01, 3.2246703342411321823620794f-01,
-    -6.7352301053198095133246196f-02, 2.0580808427784547879000897f-02,
-    -7.3855510286739852662729527f-03, 2.8905103307415232857531201f-03,
-    -1.1927539117032609771139825f-03, 5.0966952474304242233558822f-04
-)
-
-function _loggamma_stirling(x::Float32)
-    t = inv(x)
-    w = t * t
-    return muladd(x - 0.5f0, log(x), -x + HALF_LOG2PI_F32 +
-        t * @evalpoly(w, _STIRLING_COEFFS_32...)
-    )
-end
-
-function _loggamma_unsafe_pos(x::Float32)
     if x < 7
         n = 7 - floor(Int, x)
         z = x
@@ -297,105 +230,60 @@ function _loggamma_unsafe_pos(x::Float32)
     end
 end
 
-function _logabsgamma_unsafe_sub0(x::Float32)
-    s = sinpi(x)
-    s == 0 && return Float32(Inf), 1
-    sgn = signbit(s) ? -1 : 1
-    return LOGPI_F32 - log(abs(s)) - _loggamma(1 - x), sgn
-end
+####################################
+## Complex{Float64} / Complex{Float32} loggamma implementation
+####################################
 
-function _logabsgamma(x::Float32)
-    if isnan(x)
-        return x, 1
-    elseif x > 0
-        return _loggamma_unsafe_pos(x), 1
-    elseif x == 0
-        return Float32(Inf), Int(sign(1 / x))
-    else
-        s = sinpi(x)
-        s == 0 && return Float32(Inf), 1
-        sgn = signbit(s) ? -1 : 1
-        return LOGPI_F32 - log(abs(s)) - _loggamma(1 - x), sgn
-    end
-end
-
-function _loggamma(x::Float32)
-    if isnan(x)
-        return x
-    elseif isinf(x)
-        return x > 0 ? Float32(Inf) : Float32(NaN)
-    elseif x ≤ 0
-        x == 0 && return Float32(Inf)
-        isinteger(x) && return Float32(Inf)
-        y, sgn = _logabsgamma_unsafe_sub0(x)
-        sgn < 0 && throw(DomainError(x, "`gamma(x)` must be non-negative"))
-        return y
-    elseif x < 7
-        n = 7 - floor(Int, x)
-        z = x
-        prod = one(x)
-        for i in 0:n-1
-            prod *= z + i
-        end
-        return _loggamma_stirling(z + n) - log(prod)
-    else
-        return _loggamma_stirling(x)
-    end
-end
-
-function _loggamma_asymptotic(z::Complex{Float32})
-    zinv = inv(z)
-    t = zinv * zinv
-    return (z - 0.5f0) * log(z) - z + HALF_LOG2PI_F32 +
-        zinv * @evalpoly(t, _STIRLING_COEFFS_32...)
-end
-
-function _loggamma(z::Complex{Float32})
+function _loggamma(z::Complex{T}) where T<:Union{Float32,Float64}
     x = real(z)
     y = imag(z)
     yabs = abs(y)
 
     if !isfinite(x) || !isfinite(y)
         if isinf(x) && isfinite(y)
-            return Complex{Float32}(x, x > 0 ? (iszero(y) ? y : copysign(Float32(Inf), y)) : copysign(Float32(Inf), -y))
+            return Complex{T}(x, x > 0 ? (iszero(y) ? y : copysign(T(Inf), y)) : copysign(T(Inf), -y))
         elseif isfinite(x) && isinf(y)
-            return Complex{Float32}(-Float32(Inf), y)
+            return Complex{T}(-T(Inf), y)
         else
-            return Complex{Float32}(Float32(NaN), Float32(NaN))
+            return Complex{T}(T(NaN), T(NaN))
         end
     elseif x > 7 || yabs > 7
         return _loggamma_asymptotic(z)
-    elseif x < Float32(0.1)
-        if x == 0 && y == 0
-            return Complex{Float32}(Float32(Inf), copysign(Float32(π), -y))
+    elseif x < 0.1
+        if iszero(x) && iszero(y)
+            imagpart = signbit(x) ? copysign(T(π), -y) : -y
+            return Complex{T}(T(Inf), imagpart)
         end
-        return Complex(LOGPI_F32, copysign(TWO_PI_F32, y) * floor(0.5f0 * x + 0.25f0)) -
-            log(sinpi(z)) - _loggamma(Complex{Float32}(1 - x, -y))
-    elseif abs(x - 1) + yabs < 0.1f0
-        w = Complex{Float32}(x - 1, y)
-        return w * @evalpoly(w, _TAYLOR1_32...)
-    elseif abs(x - 2) + yabs < 0.1f0
-        w = Complex{Float32}(x - 2, y)
-        return w * @evalpoly(w, _TAYLOR2_32...)
+        LOGPI_T = _logpi(T)
+        TWO_PI_T = _two_pi(T)
+        return Complex(LOGPI_T, copysign(TWO_PI_T, y) * floor((one(T)/2) * x + one(T)/4)) -
+            log(sinpi(z)) - _loggamma(Complex{T}(1 - x, -y))
+    elseif abs(x - 1) + yabs < 0.1
+        w = Complex{T}(x - one(T), y)
+        return w * @evalpoly(w, _taylor1(T)...)
+    elseif abs(x - 2) + yabs < 0.1
+        w = Complex{T}(x - 2, y)
+        return w * @evalpoly(w, _taylor2(T)...)
     else
-        shiftprod = Complex{Float32}(x, yabs)
-        xshift = x + 1
+        shiftprod = Complex{T}(x, yabs)
+        xshift = x + one(T)
         sb = false
         signflips = 0
         while xshift ≤ 7
-            shiftprod *= Complex{Float32}(xshift, yabs)
+            shiftprod *= Complex{T}(xshift, yabs)
             sbp = signbit(imag(shiftprod))
             signflips += sbp & (sbp != sb)
             sb = sbp
-            xshift += 1
+            xshift += one(T)
         end
         shift = log(shiftprod)
+        TWO_PI_T = _two_pi(T)
         if signbit(y)
-            shift = Complex(real(shift), signflips * -TWO_PI_F32 - imag(shift))
+            shift = Complex(real(shift), signflips * -TWO_PI_T - imag(shift))
         else
-            shift = Complex(real(shift), imag(shift) + signflips * TWO_PI_F32)
+            shift = Complex(real(shift), imag(shift) + signflips * TWO_PI_T)
         end
-        return _loggamma_asymptotic(Complex{Float32}(xshift, y)) - shift
+        return _loggamma_asymptotic(Complex{T}(xshift, y)) - shift
     end
 end
 
@@ -518,6 +406,6 @@ function _logabsgamma(x::BigFloat)
     end
 
     s = sinpi(x)
-    s == 0 && return BigFloat(Inf), 1
+    iszero(s) && return BigFloat(Inf), 1
     return real(_loggamma_complex_bigfloat(Complex{BigFloat}(x, zero(BigFloat)))), (signbit(s) ? -1 : 1)
 end

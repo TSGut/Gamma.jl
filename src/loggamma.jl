@@ -233,8 +233,7 @@ end
 ####################################
 
 function _loggamma(z::Complex{T}) where T<:Union{Float32,Float64}
-    x = real(z)
-    y = imag(z)
+    x, y = reim(z)
     yabs = abs(y)
 
     if !isfinite(x) || !isfinite(y)

@@ -5,91 +5,108 @@
 # See: D. E. G. Hare, "Computing the principal branch of log-Gamma,"
 # J. Algorithms 25, pp. 221-236 (1997)
 
-"""
-    loggamma(x::Real)
-
-Returns the log of the absolute value of ``\\Gamma(x)`` for real `x`.
-Throws a `DomainError` if ``\\Gamma(x)`` is negative.
-
-For complex arguments, `exp(loggamma(x))` matches `gamma(x)` up to floating-point error
-but may differ from `log(gamma(x))` by an integer multiple of ``2\\pi i``.
-
-External links: [DLMF](https://dlmf.nist.gov/5.4), [Wikipedia](https://en.wikipedia.org/wiki/Gamma_function#The_log-gamma_function)
-"""
 ####################################
-## Constants and typed getters
+## Typed getters returning literals
 ####################################
-const HALF_LOG2PI_F64 = 9.1893853320467274178032927e-01
-const LOGPI_F64 = 1.1447298858494002
-const TWO_PI_F64 = 6.2831853071795864769252842
 
-const HALF_LOG2PI_F32 = 9.1893853320467274178032927f-01
-const LOGPI_F32 = 1.1447298858494002f0
-const TWO_PI_F32 = 6.2831853071795864769252842f0
+# Stirling coefficients
+function _stirling_coeffs(::Type{T}) where T
+    if T === Float64
+        return (
+            8.333333333333333333333368e-02, -2.777777777777777777777778e-03,
+            7.936507936507936507936508e-04, -5.952380952380952380952381e-04,
+            8.417508417508417508417510e-04, -1.917526917526917526917527e-03,
+            6.410256410256410256410257e-03, -2.955065359477124183006535e-02
+        )
+    elseif T === Float32
+        return (
+            8.333333333333333333333368f-02, -2.777777777777777777777778f-03,
+            7.936507936507936507936508f-04, -5.952380952380952380952381f-04,
+            8.417508417508417508417510f-04
+        )
+    else
+        throw(ArgumentError("_stirling_coeffs: unsupported floating-point type: $T"))
+    end
+end
 
-const _STIRLING_COEFFS_32 = (
-    8.333333333333333333333368f-02, -2.777777777777777777777778f-03,
-    7.936507936507936507936508f-04, -5.952380952380952380952381f-04,
-    8.417508417508417508417510f-04
-)
+# Taylor series around 1 and 2
+function _taylor1(::Type{T}) where T
+    if T === Float64
+        return (
+            -5.7721566490153286060651188e-01, 8.2246703342411321823620794e-01,
+            -4.0068563438653142846657956e-01, 2.705808084277845478790009e-01,
+            -2.0738555102867398526627303e-01, 1.6955717699740818995241986e-01,
+            -1.4404989676884611811997107e-01, 1.2550966952474304242233559e-01,
+            -1.1133426586956469049087244e-01, 1.000994575127818085337147e-01,
+            -9.0954017145829042232609344e-02, 8.3353840546109004024886499e-02,
+            -7.6932516411352191472827157e-02, 7.1432946295361336059232779e-02,
+            -6.6668705882420468032903454e-02
+        )
+    elseif T === Float32
+        return (
+            -5.7721566490153286060651188f-01, 8.2246703342411321823620794f-01,
+            -4.0068563438653142846657956f-01, 2.705808084277845478790009f-01,
+            -2.0738555102867398526627303f-01, 1.6955717699740818995241986f-01,
+            -1.4404989676884611811997107f-01, 1.2550966952474304242233559f-01,
+            -1.1133426586956469049087244f-01, 1.000994575127818085337147f-01
+        )
+    else
+        throw(ArgumentError("_taylor1: unsupported floating-point type: $T"))
+    end
+end
 
-const _STIRLING_COEFFS_64 = (
-    8.333333333333333333333368e-02, -2.777777777777777777777778e-03,
-    7.936507936507936507936508e-04, -5.952380952380952380952381e-04,
-    8.417508417508417508417510e-04, -1.917526917526917526917527e-03,
-    6.410256410256410256410257e-03, -2.955065359477124183006535e-02
-)
-
-const _TAYLOR1_32 = (
-    -5.7721566490153286060651188f-01, 8.2246703342411321823620794f-01,
-    -4.0068563438653142846657956f-01, 2.705808084277845478790009f-01,
-    -2.0738555102867398526627303f-01, 1.6955717699740818995241986f-01,
-    -1.4404989676884611811997107f-01, 1.2550966952474304242233559f-01,
-    -1.1133426586956469049087244f-01, 1.000994575127818085337147f-01
-)
-
-const _TAYLOR2_32 = (
-    4.2278433509846713939348812f-01, 3.2246703342411321823620794f-01,
-    -6.7352301053198095133246196f-02, 2.0580808427784547879000897f-02,
-    -7.3855510286739852662729527f-03, 2.8905103307415232857531201f-03,
-    -1.1927539117032609771139825f-03, 5.0966952474304242233558822f-04
-)
-
-const _TAYLOR1_64 = (
-    -5.7721566490153286060651188e-01, 8.2246703342411321823620794e-01,
-    -4.0068563438653142846657956e-01, 2.705808084277845478790009e-01,
-    -2.0738555102867398526627303e-01, 1.6955717699740818995241986e-01,
-    -1.4404989676884611811997107e-01, 1.2550966952474304242233559e-01,
-    -1.1133426586956469049087244e-01, 1.000994575127818085337147e-01,
-    -9.0954017145829042232609344e-02, 8.3353840546109004024886499e-02,
-    -7.6932516411352191472827157e-02, 7.1432946295361336059232779e-02,
-    -6.6668705882420468032903454e-02
-)
-
-const _TAYLOR2_64 = (
-    4.2278433509846713939348812e-01, 3.2246703342411321823620794e-01,
-    -6.7352301053198095133246196e-02, 2.0580808427784547879000897e-02,
-    -7.3855510286739852662729527e-03, 2.8905103307415232857531201e-03,
-    -1.1927539117032609771139825e-03, 5.0966952474304242233558822e-04,
-    -2.2315475845357937976132853e-04, 9.9457512781808533714662972e-05,
-    -4.4926236738133141700224489e-05, 2.0507212775670691553131246e-05
-)
-
-# Typed coefficient getters
-_stirling_coeffs(::Type{Float64}) = _STIRLING_COEFFS_64
-_taylor1(::Type{Float64}) = _TAYLOR1_64
-_taylor2(::Type{Float64}) = _TAYLOR2_64
-_stirling_coeffs(::Type{Float32}) = _STIRLING_COEFFS_32
-_taylor1(::Type{Float32}) = _TAYLOR1_32
-_taylor2(::Type{Float32}) = _TAYLOR2_32
+function _taylor2(::Type{T}) where T
+    if T === Float64
+        return (
+            4.2278433509846713939348812e-01, 3.2246703342411321823620794e-01,
+            -6.7352301053198095133246196e-02, 2.0580808427784547879000897e-02,
+            -7.3855510286739852662729527e-03, 2.8905103307415232857531201e-03,
+            -1.1927539117032609771139825e-03, 5.0966952474304242233558822e-04,
+            -2.2315475845357937976132853e-04, 9.9457512781808533714662972e-05,
+            -4.4926236738133141700224489e-05, 2.0507212775670691553131246e-05
+        )
+    elseif T === Float32
+        return (
+            4.2278433509846713939348812f-01, 3.2246703342411321823620794f-01,
+            -6.7352301053198095133246196f-02, 2.0580808427784547879000897f-02,
+            -7.3855510286739852662729527f-03, 2.8905103307415232857531201f-03,
+            -1.1927539117032609771139825f-03, 5.0966952474304242233558822f-04
+        )
+    else
+        throw(ArgumentError("_taylor2: unsupported floating-point type: $T"))
+    end
+end
 
 # Typed constant getters
-_half_log2pi(::Type{Float64}) = HALF_LOG2PI_F64
-_half_log2pi(::Type{Float32}) = HALF_LOG2PI_F32
-_logpi(::Type{Float64}) = LOGPI_F64
-_logpi(::Type{Float32}) = LOGPI_F32
-_two_pi(::Type{Float64}) = TWO_PI_F64
-_two_pi(::Type{Float32}) = TWO_PI_F32
+function _half_log2pi(::Type{T}) where T
+    if T === Float64
+        return 9.1893853320467274178032927e-01
+    elseif T === Float32
+        return 9.1893853320467274178032927f-01
+    else
+        throw(ArgumentError("_half_log2pi: unsupported floating-point type: $T"))
+    end
+end
+
+function _logpi(::Type{T}) where T
+    if T === Float64
+        return 1.1447298858494002
+    elseif T === Float32
+        return 1.1447298858494002f0
+    else
+        throw(ArgumentError("_logpi: unsupported floating-point type: $T"))
+    end
+end
+
+function _two_pi(::Type{T}) where T
+    if T === Float64
+        return 6.2831853071795864769252842
+    elseif T === Float32
+        return 6.2831853071795864769252842f0
+    else
+        throw(ArgumentError("_two_pi: unsupported floating-point type: $T"))
+    end
+end
 
 # Generic loggamma entry points
 loggamma(x::Union{Float32, Float64}) = _loggamma(x)
@@ -183,22 +200,25 @@ function _logabsgamma_unsafe_sub0(x::T) where T<:Union{Float32,Float64}
     return _logpi(T) - log(abs(s)) - _loggamma(T(1) - x), sgn
 end
 
-function _loggamma_stirling(x::T) where T<:Union{Float32,Float64}
-    t = inv(x)
-    w = t * t
-    return muladd(x - one(T)/2, log(x), -x + _half_log2pi(T) +
-        t * @evalpoly(w, _stirling_coeffs(T)...)
-    )
+function _loggamma_stirling(x)
+    T = typeof(real(x))
+    tinv = inv(x)
+    w = tinv * tinv
+    tail = tinv * @evalpoly(w, _stirling_coeffs(T)...)
+    return muladd(x - one(T)/2, log(x), -x + _half_log2pi(T) + tail)
 end
 
-# Asymptotic series for log(Γ(z)) for complex z with sufficiently large real(z) or |imag(z)|
-function _loggamma_asymptotic(z::Complex{T}) where T<:Union{Float32,Float64}
-    zinv = inv(z)
-    t = zinv * zinv
-    return (z - one(T)/2) * log(z) - z + _half_log2pi(T) +  # log(2π)/2
-        zinv * @evalpoly(t, _stirling_coeffs(T)...)
-end
+"""
+    loggamma(x::Real)
 
+Returns the log of the absolute value of ``\\Gamma(x)`` for real `x`.
+Throws a `DomainError` if ``\\Gamma(x)`` is negative.
+
+For complex arguments, `exp(loggamma(x))` matches `gamma(x)` up to floating-point error
+but may differ from `log(gamma(x))` by an integer multiple of ``2\\pi i``.
+
+External links: [DLMF](https://dlmf.nist.gov/5.4), [Wikipedia](https://en.wikipedia.org/wiki/Gamma_function#The_log-gamma_function)
+"""
 function _loggamma(x::T) where T<:Union{Float32,Float64}
     if isnan(x)
         return x
@@ -246,7 +266,7 @@ function _loggamma(z::Complex{T}) where T<:Union{Float32,Float64}
             return Complex{T}(T(NaN), T(NaN))
         end
     elseif x > 7 || yabs > 7
-        return _loggamma_asymptotic(z)
+        return _loggamma_stirling(z)
     elseif x < 0.1
         if iszero(x) && iszero(y)
             imagpart = signbit(x) ? copysign(T(π), -y) : -y
@@ -281,7 +301,7 @@ function _loggamma(z::Complex{T}) where T<:Union{Float32,Float64}
         else
             shift = Complex(real(shift), imag(shift) + signflips * TWO_PI_T)
         end
-        return _loggamma_asymptotic(Complex{T}(xshift, y)) - shift
+        return _loggamma_stirling(Complex{T}(xshift, y)) - shift
     end
 end
 

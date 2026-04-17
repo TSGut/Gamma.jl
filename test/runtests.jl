@@ -1,6 +1,8 @@
 using Gamma
 using Test
 import SpecialFunctions
+using Random
+Random.seed!(1993)
 
 @testset "gamma(::$T)" for (T, max, rtol) in ((Float16, 13, 1.0), (Float32, 43, 1.0), (Float64, 170, 7))
     @inferred gamma(one(T))

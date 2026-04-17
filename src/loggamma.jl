@@ -92,8 +92,7 @@ _two_pi(::Type{Float64}) = TWO_PI_F64
 _two_pi(::Type{Float32}) = TWO_PI_F32
 
 # Generic loggamma entry points
-loggamma(x::Float64) = _loggamma(x)
-loggamma(x::Float32) = _loggamma(x)
+loggamma(x::Union{Float32, Float64}) = _loggamma(x)
 loggamma(x::Float16) = Float16(_loggamma(Float32(x)))
 loggamma(x::Rational) = loggamma(float(x))
 loggamma(x::Integer) = loggamma(float(x))
@@ -180,7 +179,6 @@ end
 # logabsgamma without safety checks (used to avoid double checks)
 function _logabsgamma_unsafe_sub0(x::T) where T<:Union{Float32,Float64}
     s = sinpi(x)
-    iszero(s) && return T(Inf), 1
     sgn = signbit(s) ? -1 : 1
     return _logpi(T) - log(abs(s)) - _loggamma(T(1) - x), sgn
 end

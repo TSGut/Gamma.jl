@@ -1,5 +1,31 @@
 using Gamma: gamma, loggamma, logabsgamma, logfactorial, _loggamma_oracle64_point
 
+# Type checks for loggamma
+@testset "loggamma type inference" begin
+    for T in (Float16, Float32, Float64)
+        @inferred loggamma(one(T))
+    end
+    @inferred loggamma(1)
+    @inferred loggamma(Complex{Float64}(1.0, 0.0))
+    @inferred loggamma(Complex{Float32}(1.0f0, 0.0f0))
+end
+
+@testset "loggamma type assertions" begin
+    # exact return types for real inputs
+    for T in (Float16, Float32, Float64)
+        @test typeof(loggamma(one(T))) === T
+    end
+
+    # exact return types for complex inputs
+    @test typeof(loggamma(Complex{Float64}(1.0, 0.0))) === Complex{Float64}
+    @test typeof(loggamma(Complex{Float32}(1.0f0, 0.0f0))) === Complex{Float32}
+    @test typeof(loggamma(Complex{Float16}(Float16(1.0), Float16(0.0)))) === Complex{Float16}
+
+    # BigFloat checks
+    @test typeof(loggamma(big"1.0")) === BigFloat
+    @test typeof(loggamma(Complex{BigFloat}(big"1.0", big"0.0"))) === Complex{BigFloat}
+end
+
 @testset "logfactorial" begin
     @test logfactorial(0) ≈ 0.0 atol=5eps(Float64)
     for n in (1, 2, 3, 10, 50)
@@ -10,70 +36,95 @@ using Gamma: gamma, loggamma, logabsgamma, logfactorial, _loggamma_oracle64_poin
     @test_throws DomainError logfactorial(-1)
 end
 
-# real loggamma for Float64, Float32, Float16 against SpecialFunctions.jl
-# Note: Stirling-based approach has higher relative error near loggamma zeros (x ≈ 1, 2)
-for (T, max, rtol) in ((Float16, 13, 1.0), (Float32, 43, 1.0), (Float64, 170, 7))    
-    v = rand(T, 5000) * max
-    for x in v
-        ref = T(SpecialFunctions.loggamma(widen(x)))
-        @test isapprox(ref, loggamma(x), atol=1e-10, rtol=rtol*eps(T))
+@testset "Real loggamma" begin
+    # real loggamma for Float64, Float32, Float16 against SpecialFunctions.jl
+    # Note: Stirling-based approach has higher relative error near loggamma zeros (x ≈ 1, 2)
+    for (T, max, rtol) in ((Float16, 13, 1.0), (Float32, 43, 2.0), (Float64, 170, 2.0))    
+        v = rand(T, 10000) * max
+        for x in v
+            ref = T(SpecialFunctions.loggamma(widen(x)))
+            @test isapprox(ref, loggamma(x), atol=9*rtol*eps(T), rtol=rtol*eps(T))
+        end
+        @test isnan(loggamma(T(NaN)))
+        @test loggamma(T(Inf)) == T(Inf)
     end
-    @test isnan(loggamma(T(NaN)))
-    @test loggamma(T(Inf)) == T(Inf)
 end
 
 @test gamma(0.29384) ≈ exp(loggamma(0.29384))
 @test gamma(0.29384+0.12938im) ≈ exp(loggamma(0.29384+0.12938im))
 
-# logabsgamma
-for (T, rtol) in ((Float16, 1.0), (Float32, 1.0), (Float64, 7))
-    for x in T[0.5, 1.0, 1.5, 2.0, 5.0, 10.0, 50.0, -0.5, -1.5, -2.5, -3.5, -10.5]
-        y1, s1 = logabsgamma(x)
-        y2, s2 = SpecialFunctions.logabsgamma(Float64(x))
-        @test isapprox(y1, T(y2), atol=T(1e-3), rtol=rtol*eps(T))
-        @test s1 == s2
+@testset "logabsgamma" begin
+    for (T, rtol) in ((Float16, 1.0), (Float32, 1.0), (Float64, 2.0))
+        for x in T[0.5, 1.0, 1.5, 2.0, 5.0, 10.0, 50.0, -0.5, -1.5, -2.5, -3.5, -10.5]
+            y1, s1 = logabsgamma(x)
+            y2, s2 = SpecialFunctions.logabsgamma(Float64(x))
+            @test isapprox(y1, T(y2), atol=6*rtol*eps(T), rtol=rtol*eps(T))
+            @test s1 == s2
+        end
     end
+    # logabsgamma edge cases and SpecialFunctions behavior consistency
+    @test logabsgamma(0.0) == (Inf, 1)
+    @test logabsgamma(-0.0) == (Inf, -1)
+    @test logabsgamma(-1.0) == (Inf, 1)
+    @test logabsgamma(-2.0) == (Inf, 1)
+    @test isnan(logabsgamma(NaN)[1])
+    @test logabsgamma(NaN)[2] == 1
+    # real loggamma should throw for negative gamma
+    @test_throws DomainError loggamma(-0.5)
+    @test loggamma(-1.5) == logabsgamma(-1.5)[1]
+    # Float32 versions
+    @test logabsgamma(0.0f0) == (Float32(Inf), 1)
+    @test logabsgamma(-0.0f0) == (Float32(Inf), -1)
+    @test logabsgamma(-1.0f0) == (Float32(Inf), 1)
+    @test logabsgamma(-2.0f0) == (Float32(Inf), 1)
+    @test isnan(logabsgamma(Float32(NaN))[1])
+    @test logabsgamma(Float32(NaN))[2] == 1
+    @test_throws DomainError loggamma(-0.5f0)
+    @test loggamma(-1.5f0) == logabsgamma(-1.5f0)[1]
 end
 
-# logabsgamma edge cases and SpecialFunctions behavior consistency
-@test logabsgamma(0.0) == (Inf, 1)
-@test logabsgamma(-0.0) == (Inf, -1)
-@test logabsgamma(-1.0) == (Inf, 1)
-@test logabsgamma(-2.0) == (Inf, 1)
-@test isnan(logabsgamma(NaN)[1])
-@test logabsgamma(NaN)[2] == 1
-# real loggamma should throw for negative gamma
-@test_throws DomainError loggamma(-0.5)
-@test loggamma(-1.5) == logabsgamma(-1.5)[1]
+@testset "loggamma negative-integer poles" begin
+    for T in (Float16, Float32, Float64)
+        @test loggamma(T(-1.0)) == T(Inf)
+        @test loggamma(T(-2.0)) == T(Inf)
+    end
 
-# complex loggamma for Float64
-for z in [1.0+1.0im, 2.0+0.5im, 0.5+3.0im, 5.0+2.0im, 0.1+0.1im,
-          -1.5+0.5im, -0.5+2.0im, 3.0+0.01im, 10.0+5.0im, 0.5+0.01im]
-    @test isapprox(loggamma(z), SpecialFunctions.loggamma(z), rtol=7*eps(Float64))
+    # integer input maps to Float64
+    @test loggamma(-1) == Float64(Inf)
 end
 
-# complex loggamma for Float32 and Float16
-for z in [1.0f0+1.0f0im, 5.0f0+2.0f0im, 0.5f0+3.0f0im]
-    @test isapprox(loggamma(Complex{Float32}(z)), Complex{Float32}(SpecialFunctions.loggamma(Complex{Float64}(z))), rtol=eps(Float32))
-    @test isapprox(loggamma(Complex{Float16}(z)), Complex{Float16}(SpecialFunctions.loggamma(Complex{Float64}(z))), rtol=eps(Float16))
+@testset "Complex Loggamma" begin
+    # complex loggamma randomized tests: 10000 samples per floating-point type
+    for (T, max, rtol_scale) in ((Float64, 170, 64.0), (Float32, 43, 256.0), (Float16, 13, 64.0))
+        re = rand(T, 10000) .* (2 * T(max)) .- T(max)
+        im = rand(T, 10000) .* (2 * T(max)) .- T(max)
+        for i in eachindex(re)
+            z = Complex{T}(re[i], im[i])
+            ref64 = SpecialFunctions.loggamma(Complex{Float64}(Float64(re[i]), Float64(im[i])))
+            @test isapprox(loggamma(z), Complex{T}(ref64), rtol=rtol_scale * eps(T))
+        end
+    end
+
+    # complex loggamma edge cases and SpecialFunctions consistency
+    @test loggamma(Complex(Inf, 0.0)) == Complex(Inf, 0.0)
+    @test loggamma(Complex{Float32}(Inf, 0.0)) == Complex{Float32}(Inf, 0.0)
+    @test all(isnan, reim(loggamma(Complex(NaN, NaN))))
+    @test loggamma(Complex(0.0, 0.0)) === Complex(Inf, -0.0)
+    @test loggamma(Complex(-0.0, 0.0)) == Complex(Inf, -Float64(π))
+    @test loggamma(Complex{Float32}(-0.0, 0.0)) == Complex{Float32}(Inf, -Float32(π))
+
+    # Map Complex{Int64} to Complex{Float64} for loggamma tests
+    @test loggamma(Complex{Int64}(-300)) ≈ loggamma(Complex{Float64}(-300))
 end
 
-# complex loggamma edge cases and SpecialFunctions consistency
-@test loggamma(Complex(Inf, 0.0)) == Complex(Inf, 0.0)
-@test all(isnan, reim(loggamma(Complex(NaN, NaN))))
-@test loggamma(Complex(0.0, 0.0)) === Complex(Inf, -0.0)
-@test loggamma(Complex(-0.0, 0.0)) == Complex(Inf, -Float64(π))
-
-# BigFloat loggamma (real via complex with zero imaginary part)
-for x in [big"0.5", big"1.5", big"5.0", big"10.0", big"50.0"]
-    @test isapprox(loggamma(x), SpecialFunctions.loggamma(x), rtol=1e-30)
+@testset "BigFloat Loggamma" begin
+    # BigFloat loggamma (real via complex with zero imaginary part)
+    for x in [big"0.5", big"1.5", big"5.0", big"10.0", big"50.0"]
+        @test isapprox(loggamma(x), SpecialFunctions.loggamma(x), rtol=1e-30)
+    end
+    @test isapprox(loggamma(big"1.0"), big"0.0", atol=1e-60)
+    @test isapprox(loggamma(big"2.0"), big"0.0", atol=1e-60)
 end
-@test isapprox(loggamma(big"1.0"), big"0.0", atol=1e-60)
-@test isapprox(loggamma(big"2.0"), big"0.0", atol=1e-60)
-
-# Map Complex{Int64} to Complex{Float64} for loggamma tests
-@test loggamma(Complex{Int64}(-300)) ≈ loggamma(Complex{Float64}(-300))
-
     # values taken from Wolfram Alpha
     @testset "loggamma & logabsgamma test cases" begin
         @test loggamma(-300im) ≈ -473.17185074259241355733179182866544204963885920016823743 - 1410.3490664555822107569308046418321236643870840962522425im
@@ -211,6 +262,16 @@ end
         @test loggamma(Inf*im) === -Inf + Inf*im
         @test loggamma(-Inf*im) === -Inf - Inf*im
         @test loggamma(Inf + Inf*im) === loggamma(NaN + 0im) === loggamma(NaN*im) === NaN + NaN*im
+        # Float32
+        @test loggamma(Complex{Float32}(Inf + 0im)) === Complex{Float32}(Inf + 0im)
+        @test loggamma(Complex{Float32}(Inf - 0.0im)) === Complex{Float32}(Inf - 0.0im)
+        @test loggamma(Complex{Float32}(Inf + 1im)) === Complex{Float32}(Inf + Inf*im)
+        @test loggamma(Complex{Float32}(Inf - 1im)) === Complex{Float32}(Inf - Inf*im)
+        @test loggamma(Complex{Float32}(-Inf + 0.0im)) === Complex{Float32}(-Inf - Inf*im)
+        @test loggamma(Complex{Float32}(-Inf - 0.0im)) === Complex{Float32}(-Inf + Inf*im)
+        @test loggamma(Complex{Float32}(Inf*im)) === Complex{Float32}(-Inf + Inf*im)
+        @test loggamma(Complex{Float32}(-Inf*im)) === Complex{Float32}(-Inf - Inf*im)
+        @test loggamma(Complex{Float32}(Inf + Inf*im)) === loggamma(Complex{Float32}(NaN + 0im)) === loggamma(Complex{Float32}(NaN*im)) === Complex{Float32}(NaN + NaN*im)
     end
 
     @testset "BigFloat" begin

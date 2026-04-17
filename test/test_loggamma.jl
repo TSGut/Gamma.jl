@@ -329,7 +329,6 @@ end
 @test gamma(big"0.29384"+big"0.12938"*im) ≈ exp(loggamma(big"0.29384"+big"0.12938"*im))
 
 @testset "Typed getters reject BigFloat (arbitrary precision incompatible with fixed constants)" begin
-    # coefficient and constant getters should only support Float32/Float64
     @test_throws ArgumentError Gamma._stirling_coeffs(BigFloat)
     @test_throws ArgumentError Gamma._taylor1(BigFloat)
     @test_throws ArgumentError Gamma._taylor2(BigFloat)

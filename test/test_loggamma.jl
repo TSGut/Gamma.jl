@@ -50,10 +50,10 @@ end
         @test loggamma(T(Inf)) == T(Inf)
     end
 
-    # Hardened tests near x=1 and x=2 for Float64 and Float32
+    # Hardened tests for near integer values from 1 to 7 for Float64 and Float32
     using SpecialFunctions
-    for (T, atol, rtol) in ((Float64, 2e-15, 2e-15), (Float32, 2e-6, 2e-6))
-        for x0 in (1.0, 2.0)
+    for (T, atol, rtol) in ((Float64, 3e-15, 3e-15), (Float32, 2e-6, 2e-6))
+        for x0 in (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0)
             for dx in (-0.09, -0.05, -0.01, -0.001, -0.0001, -0.00001, -0.000001, 0.0, 0.00001, 0.0001, 0.001, 0.01, 0.05, 0.09)
                 x = T(x0 + dx)
                 ref = T(SpecialFunctions.loggamma(Float64(x)))

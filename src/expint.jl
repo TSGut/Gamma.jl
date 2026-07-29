@@ -140,15 +140,6 @@ function _En_cf_nogamma_recurrence(ν::T, z::T, tol, cap,
     return A / B, cap, false
 end
 
-function _series_iteration_cap(parameter, z)
-    R = typeof(real(z))
-    p = R(precision(R))
-    estimate = ceil(
-        exp(one(R)) * abs(z) + log(R(2)) * p + abs(parameter) + R(32)
-    )
-    return Int(min(estimate, R(typemax(Int))))
-end
-
 function _En_expand_origin_posint(
     n, z::T; maxiter::Union{Nothing,Int}=nothing
 ) where {T<:AbstractFloat}
@@ -189,7 +180,7 @@ function _En_expand_origin_posint(n, z::T, gammaterm::T,
     sumterm = n == 1 ? zero(z) : frac / (1 - n)
     R = typeof(real(z))
     tol = 8 * eps(one(R))
-    cap = isnothing(maxiter) ? _series_iteration_cap(n, z) : maxiter
+    cap = isnothing(maxiter) ? 50_000 : maxiter
     stable = 0
 
     for k = 1:cap
@@ -216,7 +207,7 @@ function _En_expand_origin_general(
     sumterm = frac / (1 - ν)
     R = typeof(real(z))
     tol = 8 * eps(one(R))
-    cap = isnothing(maxiter) ? _series_iteration_cap(ν, z) : maxiter
+    cap = isnothing(maxiter) ? 50_000 : maxiter
     stable = 0
 
     for k = 1:cap

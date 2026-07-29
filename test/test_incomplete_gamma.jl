@@ -280,6 +280,8 @@ end
 end
 
 @testset "incomplete gamma convergence reporting" begin
+    @test Gamma.gamma_inc(1e19, 1.0) == (0.0, 1.0)
+
     _, iterations, converged = Gamma._En_cf_nogamma(
         0.5, 2.0; maxiter=2, throw_on_failure=false
     )

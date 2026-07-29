@@ -79,7 +79,7 @@ function _gamma_lower_series(a::T, z::T;
 
     R = typeof(real(z))
     tol = 8 * eps(one(R))
-    cap = isnothing(maxiter) ? _series_iteration_cap(a, z) : maxiter
+    cap = isnothing(maxiter) ? 50_000 : maxiter
     term = one(z) / a
     total = term
     stable = 0
@@ -129,7 +129,7 @@ function _gamma_lower_series_normalized(
 ) where {T}
     R = typeof(real(z))
     tol = 8 * eps(one(R))
-    cap = isnothing(maxiter) ? _series_iteration_cap(a, z) : maxiter
+    cap = isnothing(maxiter) ? 50_000 : maxiter
     term = one(z)
     total = term
     stable = 0

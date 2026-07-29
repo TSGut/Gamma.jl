@@ -49,6 +49,24 @@ expintx(z::Number) = expintx(one(z), z)
 
 # Gamma-free continued fraction for E_ν(z):
 # https://functions.wolfram.com/GammaBetaErf/ExpIntegralE/10/0001/
+@inline function _En_converged(
+    delta::T, first::T, second::T, tol
+) where {T<:Real}
+    return abs(delta) <= tol * max(abs(first), abs(second))
+end
+
+@inline function _En_converged(
+    delta::Complex{T}, first::Complex{T}, second::Complex{T}, tol
+) where {T<:AbstractFloat}
+    delta2 = abs2(delta)
+    scale2 = max(abs2(first), abs2(second))
+    if isfinite(delta2) && !iszero(delta2) &&
+       isfinite(scale2) && !iszero(scale2)
+        return delta2 <= abs2(tol) * scale2
+    end
+    return abs(delta) <= tol * max(abs(first), abs(second))
+end
+
 function _En_cf_nogamma(ν::T, z::T;
                         maxiter::Union{Nothing,Int}=nothing,
                         throw_on_failure::Bool=true) where {T<:AbstractFloat}
@@ -89,8 +107,9 @@ function _En_cf_nogamma_recurrence(ν::T, z::T, tol, cap,
         Bprev /= scale
 
         current = A / B
-        denom = max(abs(current), abs(previous))
-        if i > 4 && abs(current - previous) <= tol * denom
+        if i > 4 && _En_converged(
+            current - previous, current, previous, tol
+        )
             stable += 1
             stable >= 2 && return current, i, true
         else
@@ -152,7 +171,7 @@ function _En_expand_origin_posint(n, z::T, gammaterm::T,
         if k != n - 1
             term = frac / (k + 1 - n)
             sumterm += term
-            if abs(term) <= tol * max(abs(sumterm), one(R))
+            if _En_converged(term, sumterm, one(sumterm), tol)
                 stable += 1
                 stable >= 2 && return gammaterm - sumterm
             else
@@ -178,7 +197,7 @@ function _En_expand_origin_general(
         frac *= -z / k
         term = frac / (k + 1 - ν)
         sumterm += term
-        if abs(term) <= tol * max(abs(sumterm), one(R))
+        if _En_converged(term, sumterm, one(sumterm), tol)
             stable += 1
             stable >= 2 && return gammaterm - sumterm
         else
@@ -201,7 +220,7 @@ function _En_taylor(ν::T, start::T, z0::T, delta::T;
     for k = 0:cap
         a = (delta_prod_fact + a * delta * (ν - k - 1) / (k + 1)) / z0
         total += a
-        if abs(a) <= tol * max(abs(total), one(R))
+        if _En_converged(a, total, one(total), tol)
             stable += 1
             stable >= 2 && return exp(-z0) * total
         else

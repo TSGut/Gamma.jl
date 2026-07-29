@@ -67,7 +67,7 @@ function _gamma_lower_series(a::T, z::T;
     for n = 1:cap
         term *= z / (a + n)
         total += term
-        if abs(term) <= tol * abs(total)
+        if _En_converged(term, total, zero(total), tol)
             stable += 1
             stable >= 2 &&
                 return _En_safeexpmult(a * log(z) - z, total)
@@ -110,7 +110,7 @@ function _gamma_lower_series_normalized(
     for n = 1:cap
         term *= z / (a + n)
         total += term
-        if abs(term) <= tol * abs(total)
+        if _En_converged(term, total, zero(total), tol)
             stable += 1
             if stable >= 2
                 exponent = a * log(z) - z
@@ -244,7 +244,7 @@ function _gamma(a::BigFloat, z::BigFloat)
         isinteger(a) && return _gamma_upper_cf(a, z)
     end
     p = precision(BigFloat)
-    guard = max(32, ndigits(p; base=2) + 16)
+    guard = max(24, ndigits(p; base=2) + 12)
     return setprecision(p + guard) do
         value = _gamma_upper_unsafe(BigFloat(a), BigFloat(z))
         setprecision(p) do
@@ -261,7 +261,7 @@ function _gamma(a::Complex{BigFloat}, z::Complex{BigFloat})
         isreal(a) && isinteger(real(a)) && return _gamma_upper_cf(a, z)
     end
     p = precision(BigFloat)
-    guard = max(32, ndigits(p; base=2) + 16)
+    guard = max(24, ndigits(p; base=2) + 12)
     return setprecision(p + guard) do
         ahi = Complex{BigFloat}(BigFloat(real(a)), BigFloat(imag(a)))
         zhi = Complex{BigFloat}(BigFloat(real(z)), BigFloat(imag(z)))
@@ -319,7 +319,7 @@ function _gamma_lower(a::BigFloat, z::BigFloat)
         ))
     end
     p = precision(BigFloat)
-    guard = max(32, ndigits(p; base=2) + 16)
+    guard = max(24, ndigits(p; base=2) + 12)
     return setprecision(p + guard) do
         value = _gamma_lower_unsafe(BigFloat(a), BigFloat(z))
         setprecision(p) do
@@ -338,7 +338,7 @@ function _gamma_lower(a::Complex{BigFloat}, z::Complex{BigFloat})
         ))
     end
     p = precision(BigFloat)
-    guard = max(32, ndigits(p; base=2) + 16)
+    guard = max(24, ndigits(p; base=2) + 12)
     return setprecision(p + guard) do
         ahi = Complex{BigFloat}(BigFloat(real(a)), BigFloat(imag(a)))
         zhi = Complex{BigFloat}(BigFloat(real(z)), BigFloat(imag(z)))
@@ -480,7 +480,7 @@ function _gamma_inc(a::BigFloat, z::BigFloat)
         ))
     end
     p = precision(BigFloat)
-    guard = max(32, ndigits(p; base=2) + 16)
+    guard = max(24, ndigits(p; base=2) + 12)
     return setprecision(p + guard) do
         lower, upper = _gamma_inc_unsafe(BigFloat(a), BigFloat(z))
         setprecision(p) do
@@ -499,7 +499,7 @@ function _gamma_inc(a::Complex{BigFloat}, z::Complex{BigFloat})
         ))
     end
     p = precision(BigFloat)
-    guard = max(32, ndigits(p; base=2) + 16)
+    guard = max(24, ndigits(p; base=2) + 12)
     return setprecision(p + guard) do
         ahi = Complex{BigFloat}(BigFloat(real(a)), BigFloat(imag(a)))
         zhi = Complex{BigFloat}(BigFloat(real(z)), BigFloat(imag(z)))

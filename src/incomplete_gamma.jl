@@ -39,8 +39,6 @@ function gamma_inc(a::Number, z::Number)
     return _gamma_inc(promoted...)
 end
 
-_ig_exponent(a, z) = a * log(z) - z
-
 Base.@noinline function _ig_transition_exponent(a::T, z::T) where {T}
     ratio = z / a
     return a * log(a) - a + a * (Base.@inline logmxp1(ratio))

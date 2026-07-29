@@ -70,7 +70,9 @@ function _En_cf_iteration_cap(ν, z, tol)
         sqrt(eps(one(R))) * max(one(R), abs(rootz)),
     )
     asymptotic = (target / rate)^2
-    startup = target + abs(ν) + abs(z) + R(32)
+    parameter_scale = max(zero(R), -real(ν)) + abs(imag(ν))
+    left_half_plane_scale = max(zero(R), -real(z))
+    startup = target + parameter_scale + left_half_plane_scale + R(32)
     estimate = ceil(max(asymptotic, startup))
     if !isfinite(estimate) || estimate > typemax(Int)
         throw(IncompleteGammaConvergenceError(

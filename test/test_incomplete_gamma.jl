@@ -219,6 +219,8 @@ end
     @test Gamma.expintx(0.0 + 0im, 2.0 + 1im) == inv(2.0 + 1im)
     @test Gamma.expint(2.0) == Gamma.expint(1.0, 2.0)
     @test Gamma.expintx(2.0) == Gamma.expintx(1.0, 2.0)
+    @test Gamma.expintx(0.5, 1e20) == 1e-20
+    @test Gamma.expintx(1e20, 1e20) == 5e-21
 
     reference = sqrt(π / 4) * SpecialFunctions.erfc(2)
     @test Gamma.expint(0.5, 4.0) ≈ reference rtol=8eps()

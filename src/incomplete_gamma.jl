@@ -5,12 +5,8 @@
 
 Compute the unnormalised upper incomplete gamma function `Γ(a,z)`.
 """
-gamma(a::T, z::T) where {T<:Union{Float16,Float32,Float64}} = _gamma(a, z)
-gamma(a::Complex{T}, z::Complex{T}) where {
-    T<:Union{Float16,Float32,Float64}
-} = _gamma(a, z)
-gamma(a::BigFloat, z::BigFloat) = _gamma(a, z)
-gamma(a::Complex{BigFloat}, z::Complex{BigFloat}) = _gamma(a, z)
+gamma(a::T, z::T) where {T<:AbstractFloat} = _gamma(a, z)
+gamma(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat} = _gamma(a, z)
 function gamma(a::Number, z::Number)
     promoted = promote(float(a), float(z))
     return _gamma(promoted...)
@@ -21,13 +17,9 @@ end
 
 Compute the unnormalised lower incomplete gamma function `γ(a,z)`.
 """
-gamma_lower(a::T, z::T) where {T<:Union{Float16,Float32,Float64}} =
+gamma_lower(a::T, z::T) where {T<:AbstractFloat} = _gamma_lower(a, z)
+gamma_lower(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat} =
     _gamma_lower(a, z)
-gamma_lower(a::Complex{T}, z::Complex{T}) where {
-    T<:Union{Float16,Float32,Float64}
-} = _gamma_lower(a, z)
-gamma_lower(a::BigFloat, z::BigFloat) = _gamma_lower(a, z)
-gamma_lower(a::Complex{BigFloat}, z::Complex{BigFloat}) = _gamma_lower(a, z)
 function gamma_lower(a::Number, z::Number)
     promoted = promote(float(a), float(z))
     return _gamma_lower(promoted...)
@@ -39,13 +31,9 @@ end
 Return the regularised lower and upper incomplete gamma functions `(P, Q)`,
 with `P + Q = 1`.
 """
-gamma_inc(a::T, z::T) where {T<:Union{Float16,Float32,Float64}} =
+gamma_inc(a::T, z::T) where {T<:AbstractFloat} = _gamma_inc(a, z)
+gamma_inc(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat} =
     _gamma_inc(a, z)
-gamma_inc(a::Complex{T}, z::Complex{T}) where {
-    T<:Union{Float16,Float32,Float64}
-} = _gamma_inc(a, z)
-gamma_inc(a::BigFloat, z::BigFloat) = _gamma_inc(a, z)
-gamma_inc(a::Complex{BigFloat}, z::Complex{BigFloat}) = _gamma_inc(a, z)
 function gamma_inc(a::Number, z::Number)
     promoted = promote(float(a), float(z))
     return _gamma_inc(promoted...)
@@ -58,7 +46,7 @@ Base.@noinline function _ig_transition_exponent(a::T, z::T) where {T}
     return a * log(a) - a + a * (Base.@inline logmxp1(ratio))
 end
 
-function _ig_exponent(a::T, z::T) where {T<:Union{Float32,Float64}}
+function _ig_exponent(a::T, z::T) where {T<:AbstractFloat}
     if a >= oftype(a, 50) && z > 0
         if oftype(a, 0.75) * a <= z <= oftype(a, 1.25) * a
             z == a && return a * log(a) - a
@@ -232,7 +220,7 @@ _gamma(a::Float16, z::Float16) =
 _gamma(a::ComplexF16, z::ComplexF16) =
     ComplexF16(_gamma(ComplexF32(a), ComplexF32(z)))
 
-function _gamma(a::T, z::T) where {T<:Union{Float32,Float64}}
+function _gamma(a::T, z::T) where {T<:AbstractFloat}
     z < 0 && !isinteger(a) &&
         throw(DomainError(
             z,
@@ -242,9 +230,7 @@ function _gamma(a::T, z::T) where {T<:Union{Float32,Float64}}
     return _gamma_upper_unsafe(a, z)
 end
 
-function _gamma(a::Complex{T}, z::Complex{T}) where {
-    T<:Union{Float32,Float64}
-}
+function _gamma(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat}
     if isreal(a) && isfinite(real(a)) &&
        real(a) <= 0 && isinteger(real(a))
         return _gamma_upper_cf(a, z)
@@ -291,7 +277,7 @@ _gamma_lower(a::Float16, z::Float16) =
 _gamma_lower(a::ComplexF16, z::ComplexF16) =
     ComplexF16(_gamma_lower(ComplexF32(a), ComplexF32(z)))
 
-function _gamma_lower(a::T, z::T) where {T<:Union{Float32,Float64}}
+function _gamma_lower(a::T, z::T) where {T<:AbstractFloat}
     z < 0 && !isinteger(a) &&
         throw(DomainError(
             z,
@@ -302,9 +288,7 @@ function _gamma_lower(a::T, z::T) where {T<:Union{Float32,Float64}}
     return _gamma_lower_unsafe(a, z)
 end
 
-function _gamma_lower(a::Complex{T}, z::Complex{T}) where {
-    T<:Union{Float32,Float64}
-}
+function _gamma_lower(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat}
     if isreal(a) && isfinite(real(a)) &&
        real(a) <= 0 && isinteger(real(a))
         throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
@@ -452,7 +436,7 @@ function _gamma_inc(a::ComplexF16, z::ComplexF16)
     return ComplexF16(p), ComplexF16(q)
 end
 
-function _gamma_inc(a::T, z::T) where {T<:Union{Float32,Float64}}
+function _gamma_inc(a::T, z::T) where {T<:AbstractFloat}
     z < 0 && !isinteger(a) &&
         throw(DomainError(
             z,
@@ -463,9 +447,7 @@ function _gamma_inc(a::T, z::T) where {T<:Union{Float32,Float64}}
     return _gamma_inc_unsafe(a, z)
 end
 
-function _gamma_inc(a::Complex{T}, z::Complex{T}) where {
-    T<:Union{Float32,Float64}
-}
+function _gamma_inc(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat}
     if isreal(a) && isfinite(real(a)) &&
        real(a) <= 0 && isinteger(real(a))
         throw(DomainError(a, "the lower incomplete gamma has a pole at a"))

@@ -22,13 +22,9 @@ end
 Compute the generalized exponential integral
 `E_ν(z) = ∫₁^∞ exp(-z*t)/t^ν dt` on its principal branch.
 """
-expint(ν::T, z::T) where {T<:Union{Float16,Float32,Float64}} =
+expint(ν::T, z::T) where {T<:AbstractFloat} = _expint(ν, z, false)
+expint(ν::Complex{T}, z::Complex{T}) where {T<:AbstractFloat} =
     _expint(ν, z, false)
-expint(ν::Complex{T}, z::Complex{T}) where {
-    T<:Union{Float16,Float32,Float64}
-} = _expint(ν, z, false)
-expint(ν::BigFloat, z::BigFloat) = _expint(ν, z, false)
-expint(ν::Complex{BigFloat}, z::Complex{BigFloat}) = _expint(ν, z, false)
 function expint(ν::Number, z::Number)
     promoted = promote(float(ν), float(z))
     return _expint(promoted..., false)
@@ -42,13 +38,9 @@ expint(z::Number) = expint(one(z), z)
 Compute the exponentially scaled generalized exponential integral
 `exp(z) * E_ν(z)`.
 """
-expintx(ν::T, z::T) where {T<:Union{Float16,Float32,Float64}} =
+expintx(ν::T, z::T) where {T<:AbstractFloat} = _expint(ν, z, true)
+expintx(ν::Complex{T}, z::Complex{T}) where {T<:AbstractFloat} =
     _expint(ν, z, true)
-expintx(ν::Complex{T}, z::Complex{T}) where {
-    T<:Union{Float16,Float32,Float64}
-} = _expint(ν, z, true)
-expintx(ν::BigFloat, z::BigFloat) = _expint(ν, z, true)
-expintx(ν::Complex{BigFloat}, z::Complex{BigFloat}) = _expint(ν, z, true)
 function expintx(ν::Number, z::Number)
     promoted = promote(float(ν), float(z))
     return _expint(promoted..., true)
@@ -331,9 +323,7 @@ function _expint_left_halfplane(
     return expscaled ? _En_safeexpmult(original_z, result) : result
 end
 
-function _expint(ν::T, z::T, expscaled::Bool) where {
-    T<:Union{Float32,Float64,BigFloat}
-}
+function _expint(ν::T, z::T, expscaled::Bool) where {T<:AbstractFloat}
     if isnan(ν) || isnan(z)
         return oftype(z, NaN) * z
     elseif z < 0
@@ -348,9 +338,7 @@ function _expint(ν::T, z::T, expscaled::Bool) where {
 end
 
 function _expint(ν::Complex{T}, z::Complex{T},
-                 expscaled::Bool) where {
-    T<:Union{Float32,Float64,BigFloat}
-}
+                 expscaled::Bool) where {T<:AbstractFloat}
     if isnan(ν) || isnan(z)
         return oftype(z, NaN) * z
     elseif iszero(z)

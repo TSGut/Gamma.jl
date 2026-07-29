@@ -242,7 +242,7 @@ function _expint_left_halfplane(
     quick = max(64, 2 * precision(R))
     target = -log(8 * eps(one(R)))
     s = R(5) * target / (R(16) * sqrt(R(quick)))
-    estimate = 2 * s * sqrt(max(zero(R), s^2 - real(z)))
+    estimate = 2 * s * sqrt(s^2 - real(z))
     imstart = max(imz, estimate)
     z0 = complex(rez, imstart)
     cf, _, converged = _En_cf_nogamma(ν, z0; maxiter=quick,
@@ -266,7 +266,7 @@ function _expint_left_halfplane(
 
     start = _En_safeexpmult(-z0, cf)
     distance = imstart - imz
-    nsteps = max(1, ceil(Int, 2 * distance))
+    nsteps = ceil(Int, 2 * distance)
     nsteps > 1_000_000 &&
         throw(IncompleteGammaConvergenceError(:expint_left_halfplane, nsteps))
     delta = (imz - imstart) * im / nsteps
@@ -328,12 +328,12 @@ _expint(ν::ComplexF16, z::ComplexF16, expscaled::Bool) =
 function _expint_unsafe(ν::T, z::T,
                         expscaled::Bool) where {T<:AbstractFloat}
     if abs2(z) < 9
-        result = if isinteger(ν) && ν > 0
-            _En_expand_origin_posint(ν, z)
-        else
-            _En_expand_origin_general(ν, z)
+        positive_integer = isinteger(ν) && ν > 0
+        if !positive_integer || ν <= typemax(Int)
+            result = positive_integer ? _En_expand_origin_posint(ν, z) :
+                                        _En_expand_origin_general(ν, z)
+            return expscaled ? _En_safeexpmult(z, result) : result
         end
-        return expscaled ? _En_safeexpmult(z, result) : result
     end
     cf, _, _ = _En_cf_nogamma(ν, z)
     return expscaled ? cf : _En_safeexpmult(-z, cf)
@@ -342,13 +342,15 @@ end
 function _expint_unsafe(ν::Complex{T}, z::Complex{T},
                         expscaled::Bool) where {T<:AbstractFloat}
     if abs2(z) < 9
-        result = if isreal(ν) && isinteger(real(ν)) && real(ν) > 0
-            _En_expand_origin_posint(real(ν), z)
-        else
-            _En_expand_origin_general(ν, z)
+        realν = real(ν)
+        positive_integer = isreal(ν) && isinteger(realν) && realν > 0
+        if !positive_integer || realν <= typemax(Int)
+            result = positive_integer ? _En_expand_origin_posint(realν, z) :
+                                        _En_expand_origin_general(ν, z)
+            return expscaled ? _En_safeexpmult(z, result) : result
         end
-        return expscaled ? _En_safeexpmult(z, result) : result
-    elseif real(z) > 0
+    end
+    if real(z) > 0
         cf, _, _ = _En_cf_nogamma(ν, z)
         return expscaled ? cf : _En_safeexpmult(-z, cf)
     end

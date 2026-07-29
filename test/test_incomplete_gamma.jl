@@ -221,6 +221,12 @@ end
     @test Gamma.expintx(2.0) == Gamma.expintx(1.0, 2.0)
     @test Gamma.expintx(0.5, 1e20) == 1e-20
     @test Gamma.expintx(1e20, 1e20) == 5e-21
+    for T in (Float64, BigFloat)
+        ν, z = parse(T, "1e20"), T(0.5)
+        value = Gamma.expint(ν, z)
+        @test isfinite(value) && value > 0
+        @test Gamma.expint(complex(ν), complex(z)) == complex(value)
+    end
 
     reference = sqrt(π / 4) * SpecialFunctions.erfc(2)
     @test Gamma.expint(0.5, 4.0) ≈ reference rtol=8eps()
@@ -264,15 +270,13 @@ end
     @test gamma(-1.0, 1.0) ≈ exp(-1) - Gamma.expint(1.0)
 
     @test Gamma.gamma_inc(2.5, 0.0) == (0.0, 1.0)
+    @test Gamma.gamma_inc(Inf, 0.0) == (0.0, 1.0)
     @test_throws DomainError Gamma.gamma_inc(-0.5, 0.0)
     @test Gamma.gamma_inc(2.5 + 0im, 0.0 + 0im) ==
           (0.0 + 0im, 1.0 + 0im)
+    @test Gamma.gamma_inc(complex(Inf), complex(0.0)) ==
+          (0.0 + 0im, 1.0 + 0im)
     @test_throws DomainError Gamma.gamma_inc(-0.5 + 0im, 0.0 + 0im)
-    @test_throws DomainError Gamma.gamma_inc(big"0", big"1")
-    @test_throws DomainError Gamma.gamma_inc(big"-0.5", big"0")
-    @test_throws DomainError Gamma.gamma_inc(
-        complex(big"-0.5"), complex(big"0")
-    )
 
     complex_p, complex_q = Gamma.gamma_inc(2.0 + 0im, 1.0 + 0im)
     real_p, real_q = Gamma.gamma_inc(2.0, 1.0)

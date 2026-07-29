@@ -102,6 +102,7 @@ end
 function _gamma_lower_series_normalized(
     a::T, z::T; maxiter::Union{Nothing,Int}=nothing
 ) where {T}
+    iszero(z) && return zero(z)
     R = typeof(real(z))
     tol = 8 * eps(one(R))
     cap = isnothing(maxiter) ? 50_000 : maxiter

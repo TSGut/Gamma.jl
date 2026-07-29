@@ -60,11 +60,6 @@ end
 
 function _gamma_lower_series(a::T, z::T;
                              maxiter::Union{Nothing,Int}=nothing) where {T}
-    if iszero(z)
-        real(a) > 0 && return zero(z^a)
-        throw(DomainError(z, "the lower incomplete gamma is singular at z = 0"))
-    end
-
     R = typeof(real(z))
     tol = 8 * eps(one(R))
     cap = isnothing(maxiter) ? 50_000 : maxiter
@@ -86,10 +81,6 @@ function _gamma_lower_series(a::T, z::T;
 end
 
 function _gamma_upper_cf(a::T, z::T) where {T<:AbstractFloat}
-    if iszero(z)
-        a > 0 && return gamma(a)
-        throw(DomainError(z, "the upper incomplete gamma is singular at z = 0"))
-    end
     # Γ(a,z) = z^a E_{1-a}(z).
     ν = 1 - a
     scaled, _, _ = _En_cf_nogamma(ν, z)
@@ -99,10 +90,6 @@ end
 function _gamma_upper_cf(
     a::Complex{T}, z::Complex{T}
 ) where {T<:AbstractFloat}
-    if iszero(z)
-        real(a) > 0 && return gamma(a)
-        throw(DomainError(z, "the upper incomplete gamma is singular at z = 0"))
-    end
     ν = 1 - a
     scaled = if real(z) > 0
         _En_cf_nogamma(ν, z)[1]
@@ -226,14 +213,21 @@ function _gamma(a::T, z::T) where {T<:AbstractFloat}
             z,
             "a negative real z has a complex principal value; pass complex(z)",
         ))
-    isfinite(a) && a <= 0 && isinteger(a) && return _gamma_upper_cf(a, z)
+    if !(a > 0)
+        iszero(z) && throw(DomainError(
+            z, "the upper incomplete gamma is singular at z = 0"
+        ))
+        isinteger(a) && return _gamma_upper_cf(a, z)
+    end
     return _gamma_upper_unsafe(a, z)
 end
 
 function _gamma(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat}
-    if isreal(a) && isfinite(real(a)) &&
-       real(a) <= 0 && isinteger(real(a))
-        return _gamma_upper_cf(a, z)
+    if !(real(a) > 0)
+        iszero(z) && throw(DomainError(
+            z, "the upper incomplete gamma is singular at z = 0"
+        ))
+        isreal(a) && isinteger(real(a)) && return _gamma_upper_cf(a, z)
     end
     return _gamma_upper_unsafe(a, z)
 end
@@ -244,7 +238,12 @@ function _gamma(a::BigFloat, z::BigFloat)
             z,
             "a negative real z has a complex principal value; pass complex(z)",
     ))
-    isfinite(a) && a <= 0 && isinteger(a) && return _gamma_upper_cf(a, z)
+    if !(a > 0)
+        iszero(z) && throw(DomainError(
+            z, "the upper incomplete gamma is singular at z = 0"
+        ))
+        isinteger(a) && return _gamma_upper_cf(a, z)
+    end
     p = precision(BigFloat)
     guard = max(32, ndigits(p; base=2) + 16)
     return setprecision(p + guard) do
@@ -256,9 +255,11 @@ function _gamma(a::BigFloat, z::BigFloat)
 end
 
 function _gamma(a::Complex{BigFloat}, z::Complex{BigFloat})
-    if isreal(a) && isfinite(real(a)) &&
-       real(a) <= 0 && isinteger(real(a))
-        return _gamma_upper_cf(a, z)
+    if !(real(a) > 0)
+        iszero(z) && throw(DomainError(
+            z, "the upper incomplete gamma is singular at z = 0"
+        ))
+        isreal(a) && isinteger(real(a)) && return _gamma_upper_cf(a, z)
     end
     p = precision(BigFloat)
     guard = max(32, ndigits(p; base=2) + 16)
@@ -283,15 +284,24 @@ function _gamma_lower(a::T, z::T) where {T<:AbstractFloat}
             z,
             "a negative real z has a complex principal value; pass complex(z)",
         ))
-    isfinite(a) && a <= 0 && isinteger(a) &&
-        throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+    if !(a > 0)
+        isinteger(a) &&
+            throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+        iszero(z) && throw(DomainError(
+            z, "the lower incomplete gamma is singular at z = 0"
+        ))
+    end
     return _gamma_lower_unsafe(a, z)
 end
 
 function _gamma_lower(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat}
-    if isreal(a) && isfinite(real(a)) &&
-       real(a) <= 0 && isinteger(real(a))
-        throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+    if !(real(a) > 0)
+        if isreal(a) && isinteger(real(a))
+            throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+        end
+        iszero(z) && throw(DomainError(
+            z, "the lower incomplete gamma is singular at z = 0"
+        ))
     end
     return _gamma_lower_unsafe(a, z)
 end
@@ -302,8 +312,13 @@ function _gamma_lower(a::BigFloat, z::BigFloat)
             z,
             "a negative real z has a complex principal value; pass complex(z)",
         ))
-    isfinite(a) && a <= 0 && isinteger(a) &&
-        throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+    if !(a > 0)
+        isinteger(a) &&
+            throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+        iszero(z) && throw(DomainError(
+            z, "the lower incomplete gamma is singular at z = 0"
+        ))
+    end
     p = precision(BigFloat)
     guard = max(32, ndigits(p; base=2) + 16)
     return setprecision(p + guard) do
@@ -315,9 +330,13 @@ function _gamma_lower(a::BigFloat, z::BigFloat)
 end
 
 function _gamma_lower(a::Complex{BigFloat}, z::Complex{BigFloat})
-    if isreal(a) && isfinite(real(a)) &&
-       real(a) <= 0 && isinteger(real(a))
-        throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+    if !(real(a) > 0)
+        if isreal(a) && isinteger(real(a))
+            throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+        end
+        iszero(z) && throw(DomainError(
+            z, "the lower incomplete gamma is singular at z = 0"
+        ))
     end
     p = precision(BigFloat)
     guard = max(32, ndigits(p; base=2) + 16)
@@ -332,12 +351,6 @@ function _gamma_lower(a::Complex{BigFloat}, z::Complex{BigFloat})
 end
 
 function _gamma_inc_unsafe(a::T, z::T) where {T<:AbstractFloat}
-    if iszero(z)
-        a > 0 && return zero(z), one(z)
-        throw(DomainError(
-            z, "the upper incomplete gamma is singular at z = 0"
-        ))
-    end
     if _gamma_lower_direct(a, z)
         p = _gamma_lower_series_normalized(a, z)
         return p, one(p) - p
@@ -351,12 +364,6 @@ end
 function _gamma_inc_unsafe(
     a::Complex{T}, z::Complex{T}
 ) where {T<:AbstractFloat}
-    if iszero(z)
-        real(a) > 0 && return zero(z), one(z)
-        throw(DomainError(
-            z, "the upper incomplete gamma is singular at z = 0"
-        ))
-    end
     if _gamma_lower_direct(a, z)
         p = _gamma_lower_series_normalized(a, z)
         return p, one(p) - p
@@ -376,11 +383,8 @@ function _gamma_inc_from_upper(a::Float64, scaled::Float64,
     if 0 < a <= 11.5
         denominator = gamma(a)
         numerator = exp(exponent)
-        if isfinite(denominator) && !iszero(denominator) &&
-           isfinite(numerator) && !iszero(numerator)
-            q = numerator * scaled / denominator
-            isfinite(q) && !iszero(q) && return one(q) - q, q
-        end
+        q = numerator * scaled / denominator
+        return one(q) - q, q
     end
     logabs, sign = logabsgamma(a)
     q = sign * _En_safeexpmult(exponent - logabs, scaled)
@@ -399,8 +403,7 @@ function _gamma_inc_from_upper(a::ComplexF64, scaled::ComplexF64,
     if isreal(a) && 0 < real(a) <= 11.5
         denominator = gamma(real(a))
         numerator = exp(exponent)
-        if isfinite(denominator) && !iszero(denominator) &&
-           isfinite(numerator) && !iszero(numerator)
+        if isfinite(numerator) && !iszero(numerator)
             q = numerator * scaled / denominator
             isfinite(q) && !iszero(q) && return one(q) - q, q
         end
@@ -442,15 +445,24 @@ function _gamma_inc(a::T, z::T) where {T<:AbstractFloat}
             z,
             "a negative real z has a complex principal value; pass complex(z)",
         ))
-    isfinite(a) && a <= 0 && isinteger(a) &&
-        throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+    if !(a > 0)
+        isinteger(a) &&
+            throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+        iszero(z) && throw(DomainError(
+            z, "the upper incomplete gamma is singular at z = 0"
+        ))
+    end
     return _gamma_inc_unsafe(a, z)
 end
 
 function _gamma_inc(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat}
-    if isreal(a) && isfinite(real(a)) &&
-       real(a) <= 0 && isinteger(real(a))
-        throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+    if !(real(a) > 0)
+        if isreal(a) && isinteger(real(a))
+            throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+        end
+        iszero(z) && throw(DomainError(
+            z, "the upper incomplete gamma is singular at z = 0"
+        ))
     end
     return _gamma_inc_unsafe(a, z)
 end
@@ -461,8 +473,13 @@ function _gamma_inc(a::BigFloat, z::BigFloat)
             z,
             "a negative real z has a complex principal value; pass complex(z)",
         ))
-    isfinite(a) && a <= 0 && isinteger(a) &&
-        throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+    if !(a > 0)
+        isinteger(a) &&
+            throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+        iszero(z) && throw(DomainError(
+            z, "the upper incomplete gamma is singular at z = 0"
+        ))
+    end
     p = precision(BigFloat)
     guard = max(32, ndigits(p; base=2) + 16)
     return setprecision(p + guard) do
@@ -474,9 +491,13 @@ function _gamma_inc(a::BigFloat, z::BigFloat)
 end
 
 function _gamma_inc(a::Complex{BigFloat}, z::Complex{BigFloat})
-    if isreal(a) && isfinite(real(a)) &&
-       real(a) <= 0 && isinteger(real(a))
-        throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+    if !(real(a) > 0)
+        if isreal(a) && isinteger(real(a))
+            throw(DomainError(a, "the lower incomplete gamma has a pole at a"))
+        end
+        iszero(z) && throw(DomainError(
+            z, "the upper incomplete gamma is singular at z = 0"
+        ))
     end
     p = precision(BigFloat)
     guard = max(32, ndigits(p; base=2) + 16)

@@ -250,8 +250,13 @@ end
 @testset "incomplete gamma special values" begin
     @test gamma_lower(2.5, 0.0) == 0.0
     @test_throws DomainError gamma_lower(-0.5, 0.0)
-    @test Gamma._gamma_upper_cf(2.5, 0.0) == gamma(2.5)
-    @test Gamma._gamma_upper_cf(2.5 + 0im, 0.0 + 0im) == gamma(2.5 + 0im)
+    @test_throws DomainError Gamma.gamma_inc(BigFloat(0), BigFloat(1))
+    @test_throws DomainError Gamma.gamma_inc(BigFloat(-0.5), BigFloat(0))
+    @test_throws DomainError Gamma.gamma_inc(
+        complex(big"-0.5", big"0.25"), complex(big"0")
+    )
+    @test gamma(2.5, 0.0) == gamma(2.5)
+    @test gamma(2.5 + 0im, 0.0 + 0im) == gamma(2.5 + 0im)
     @test_throws DomainError gamma(0.0, 0.0)
     @test_throws DomainError gamma(0.0 + 0im, 0.0 + 0im)
 
@@ -263,6 +268,11 @@ end
     @test Gamma.gamma_inc(2.5 + 0im, 0.0 + 0im) ==
           (0.0 + 0im, 1.0 + 0im)
     @test_throws DomainError Gamma.gamma_inc(-0.5 + 0im, 0.0 + 0im)
+    @test_throws DomainError Gamma.gamma_inc(big"0", big"1")
+    @test_throws DomainError Gamma.gamma_inc(big"-0.5", big"0")
+    @test_throws DomainError Gamma.gamma_inc(
+        complex(big"-0.5"), complex(big"0")
+    )
 
     complex_p, complex_q = Gamma.gamma_inc(2.0 + 0im, 1.0 + 0im)
     real_p, real_q = Gamma.gamma_inc(2.0, 1.0)
@@ -289,16 +299,6 @@ end
     @test !converged
 
     forced_failures = (
-        (:expint_continued_fraction, typemax(Int),
-         () -> setprecision(64) do
-             Gamma._En_cf_nogamma(
-                 complex(big"0.5"), Complex{BigFloat}(BigFloat(-1), BigFloat(0))
-             )
-         end),
-        (:expint_continued_fraction, typemax(Int),
-         () -> setprecision(64) do
-             Gamma._En_cf_nogamma(big"0.5", BigFloat(-1))
-         end),
         (:expint_origin_series, 1,
          () -> Gamma._En_expand_origin_posint(2, 0.5; maxiter=1)),
         (:expint_origin_series, 1,

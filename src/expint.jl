@@ -49,36 +49,11 @@ expintx(z::Number) = expintx(one(z), z)
 
 # Gamma-free continued fraction for E_ν(z):
 # https://functions.wolfram.com/GammaBetaErf/ExpIntegralE/10/0001/
-_En_cf_root(z::T) where {T<:AbstractFloat} =
-    z >= 0 ? sqrt(z) : sqrt(complex(z))
-_En_cf_root(z::Complex{T}) where {T<:AbstractFloat} = sqrt(z)
-
-function _En_cf_iteration_cap(ν, z, tol)
-    R = typeof(real(z))
-    target = -log(tol)
-    rootz = _En_cf_root(z)
-    rate = 2 * max(
-        real(rootz),
-        sqrt(eps(one(R))) * max(one(R), abs(rootz)),
-    )
-    asymptotic = (target / rate)^2
-    parameter_scale = max(zero(R), -real(ν)) + abs(imag(ν))
-    left_half_plane_scale = max(zero(R), -real(z))
-    startup = target + parameter_scale + left_half_plane_scale + R(32)
-    estimate = ceil(max(asymptotic, startup))
-    if !isfinite(estimate) || estimate > typemax(Int)
-        throw(IncompleteGammaConvergenceError(
-            :expint_continued_fraction, typemax(Int)
-        ))
-    end
-    return max(16, Int(estimate))
-end
-
 function _En_cf_nogamma(ν::T, z::T;
                         maxiter::Union{Nothing,Int}=nothing,
                         throw_on_failure::Bool=true) where {T<:AbstractFloat}
     tol = 8 * eps(one(T))
-    cap = isnothing(maxiter) ? _En_cf_iteration_cap(ν, z, tol) : maxiter
+    cap = isnothing(maxiter) ? 50_000 : maxiter
     return _En_cf_nogamma_recurrence(ν, z, tol, cap, throw_on_failure)
 end
 
@@ -86,13 +61,13 @@ function _En_cf_nogamma(ν::Complex{T}, z::Complex{T};
                         maxiter::Union{Nothing,Int}=nothing,
                         throw_on_failure::Bool=true) where {T<:AbstractFloat}
     tol = 8 * eps(one(T))
-    cap = isnothing(maxiter) ? _En_cf_iteration_cap(ν, z, tol) : maxiter
+    cap = isnothing(maxiter) ? 50_000 : maxiter
     return _En_cf_nogamma_recurrence(ν, z, tol, cap, throw_on_failure)
 end
 
 function _En_cf_nogamma_recurrence(ν::T, z::T, tol, cap,
                                     throw_on_failure) where {T}
-    B = float(z + ν)
+    B = z + ν
     Bprev::typeof(B) = z
     A::typeof(B) = one(B)
     Aprev::typeof(B) = one(B)
@@ -108,17 +83,14 @@ function _En_cf_nogamma_recurrence(ν::T, z::T, tol, cap,
         B, Bprev = B + coefficient * Bprev, B
 
         scale = max(abs(A), abs(Aprev), abs(B), abs(Bprev))
-        if isfinite(scale) && !iszero(scale)
-            A /= scale
-            Aprev /= scale
-            B /= scale
-            Bprev /= scale
-        end
+        A /= scale
+        Aprev /= scale
+        B /= scale
+        Bprev /= scale
 
         current = A / B
         denom = max(abs(current), abs(previous))
-        if i > 4 && (iszero(denom) ? current == previous :
-                    abs(current - previous) <= tol * denom)
+        if i > 4 && abs(current - previous) <= tol * denom
             stable += 1
             stable >= 2 && return current, i, true
         else
@@ -143,7 +115,7 @@ function _En_expand_origin_posint(
         end
         result
     else
-        sign = isodd(Int(m)) ? -one(m) : one(m)
+        sign = isodd(m) ? -one(m) : one(m)
         sign * exp(m * log(abs(z)) - loggamma(m + 1))
     end
     return _En_expand_origin_posint(n, z, gammaterm, maxiter)
@@ -275,7 +247,6 @@ function _expint_left_halfplane(
     z0 = complex(rez, imstart)
     cf, _, converged = _En_cf_nogamma(ν, z0; maxiter=quick,
                                       throw_on_failure=false)
-    start = _En_safeexpmult(-z0, cf)
 
     doublings = 0
     while !converged
@@ -283,17 +254,17 @@ function _expint_left_halfplane(
         z0 = complex(rez, imstart)
         cf, _, converged = _En_cf_nogamma(ν, z0; maxiter=quick,
                                           throw_on_failure=false)
-        start = _En_safeexpmult(-z0, cf)
         doublings += 1
         doublings > 4 * precision(R) + 64 &&
             throw(IncompleteGammaConvergenceError(:expint_left_halfplane, quick))
     end
 
     if imz > 0 && z0 == z
-        result = expscaled ? cf : start
+        result = expscaled ? cf : _En_safeexpmult(-z0, cf)
         return reflect ? conj(result) : result
     end
 
+    start = _En_safeexpmult(-z0, cf)
     distance = imstart - imz
     nsteps = max(1, ceil(Int, 2 * distance))
     nsteps > 1_000_000 &&
@@ -358,9 +329,7 @@ function _expint_unsafe(ν::T, z::T,
                         expscaled::Bool) where {T<:AbstractFloat}
     if abs2(z) < 9
         result = if isinteger(ν) && ν > 0
-            n = ν
-            n <= typemax(Int) ? _En_expand_origin_posint(Int(n), z) :
-                                _En_expand_origin_posint(n, z)
+            _En_expand_origin_posint(ν, z)
         else
             _En_expand_origin_general(ν, z)
         end
@@ -374,9 +343,7 @@ function _expint_unsafe(ν::Complex{T}, z::Complex{T},
                         expscaled::Bool) where {T<:AbstractFloat}
     if abs2(z) < 9
         result = if isreal(ν) && isinteger(real(ν)) && real(ν) > 0
-            n = real(ν)
-            n <= typemax(Int) ? _En_expand_origin_posint(Int(n), z) :
-                                _En_expand_origin_posint(n, z)
+            _En_expand_origin_posint(real(ν), z)
         else
             _En_expand_origin_general(ν, z)
         end

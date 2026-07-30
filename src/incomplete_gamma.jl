@@ -1,4 +1,6 @@
-# Public entry points
+####################################
+## Public entry points
+####################################
 
 """
     gamma(a, z)
@@ -8,8 +10,8 @@ Compute the unnormalised upper incomplete gamma function `Γ(a,z)`.
 gamma(a::T, z::T) where {T<:AbstractFloat} = _gamma(a, z)
 gamma(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat} = _gamma(a, z)
 function gamma(a::Number, z::Number)
-    promoted = promote(float(a), float(z))
-    return _gamma(promoted...)
+    a, z = promote(float(a), float(z))
+    return _gamma(a, z)
 end
 
 """
@@ -21,8 +23,8 @@ gamma_lower(a::T, z::T) where {T<:AbstractFloat} = _gamma_lower(a, z)
 gamma_lower(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat} =
     _gamma_lower(a, z)
 function gamma_lower(a::Number, z::Number)
-    promoted = promote(float(a), float(z))
-    return _gamma_lower(promoted...)
+    a, z = promote(float(a), float(z))
+    return _gamma_lower(a, z)
 end
 
 """
@@ -35,74 +37,13 @@ gamma_inc(a::T, z::T) where {T<:AbstractFloat} = _gamma_inc(a, z)
 gamma_inc(a::Complex{T}, z::Complex{T}) where {T<:AbstractFloat} =
     _gamma_inc(a, z)
 function gamma_inc(a::Number, z::Number)
-    promoted = promote(float(a), float(z))
-    return _gamma_inc(promoted...)
+    a, z = promote(float(a), float(z))
+    return _gamma_inc(a, z)
 end
 
-Base.@noinline function _ig_transition_exponent(a::T, z::T) where {T}
-    ratio = z / a
-    return a * log(a) - a + a * (Base.@inline logmxp1(ratio))
-end
-
-function _ig_exponent(a::T, z::T) where {T<:AbstractFloat}
-    if a >= oftype(a, 50) && z > 0
-        if oftype(a, 0.75) * a <= z <= oftype(a, 1.25) * a
-            z == a && return a * log(a) - a
-            return _ig_transition_exponent(a, z)
-        end
-    end
-    return a * log(z) - z
-end
-
-# Incomplete gamma
-
-# Adapted from SpecialFunctions.jl 2.8.0 (MIT license).
-function _gamma_inc_taylor_x(a::Float64, x::Float64)
-    l = 3.0
-    c = x
-    total = x / (a + 3.0)
-    tol = 15e-15 / (a + 1.0)
-    while true
-        l += 1.0
-        c *= -x / l
-        term = c / (a + l)
-        total += term
-        abs(term) <= tol && break
-    end
-
-    correction =
-        a * x * ((total / 6.0 - 0.5 / (a + 2.0)) * x + 1.0 / (a + 1.0))
-    exponent = a * log(x)
-
-    h = if a < 0.1
-        top = evalpoly(a, (
-            0.577215664901533, -0.409078193005776, -0.230975380857675,
-            0.0597275330452234, 0.007669681649490,
-            -0.00514889771323592, 0.000589597428611429,
-        ))
-        bottom = evalpoly(a, (
-            1.0, 0.427569613095214, 0.158451672430138,
-            0.0261132021441447, 0.00423244297896961,
-        ))
-        a * top / bottom
-    else
-        inv(gamma(a + 1.0)) - 1.0
-    end
-    inverse_gamma = 1.0 + h
-
-    if (x < 0.25 && exponent > -0.13394) || a < x / 2.59
-        power_minus_one = expm1(exponent)
-        power = 1.0 + power_minus_one
-        q = max(
-            (power * correction - power_minus_one) * inverse_gamma - h,
-            0.0,
-        )
-        return 1.0 - q, q
-    end
-
-    p = exp(exponent) * inverse_gamma * (1.0 - correction)
-    return p, 1.0 - p
-end
+####################################
+## Shared numerical methods
+####################################
 
 function _gamma_lower_series(a::T, z::T;
                              maxiter::Union{Nothing,Int}=nothing) where {T}
@@ -145,54 +86,6 @@ function _gamma_upper_cf(
     return _En_safeexpmult(a * log(z) - z, scaled)
 end
 
-function _gamma_lower_series_normalized(
-    a::T, z::T; maxiter::Union{Nothing,Int}=nothing
-) where {T}
-    iszero(z) && return zero(z)
-    R = typeof(real(z))
-    tol = 8 * eps(one(R))
-    cap = isnothing(maxiter) ? 50_000 : maxiter
-    term = one(z)
-    total = term
-    stable = 0
-    for n = 1:cap
-        term *= z / (a + n)
-        total += term
-        if _En_converged(term, total, zero(total), tol)
-            stable += 1
-            if stable >= 2
-                exponent = a * log(z) - z
-                gamma_argument = a + one(a)
-                return _gamma_lower_series_normalized_result(
-                    exponent, gamma_argument, total
-                )
-            end
-        else
-            stable = 0
-        end
-    end
-    throw(IncompleteGammaConvergenceError(
-        :normalized_lower_incomplete_gamma_series, cap
-    ))
-end
-
-function _gamma_lower_series_normalized_result(
-    exponent::T, gamma_argument::T, total::T
-) where {T<:AbstractFloat}
-    logabs, sign = logabsgamma(gamma_argument)
-    return sign * _En_safeexpmult(exponent - logabs, total)
-end
-
-function _gamma_lower_series_normalized_result(
-    exponent::Complex{T}, gamma_argument::Complex{T}, total::Complex{T}
-) where {T<:AbstractFloat}
-    if isreal(gamma_argument)
-        logabs, sign = logabsgamma(real(gamma_argument))
-        return sign * _En_safeexpmult(exponent - logabs, total)
-    end
-    return _En_safeexpmult(exponent - loggamma(gamma_argument), total)
-end
-
 function _gamma_lower_direct(a::T, z::T) where {T<:AbstractFloat}
     if a > 0 && z >= 0
         return z <= a + oftype(a, 0.1)
@@ -211,7 +104,7 @@ function _gamma_lower_direct(
     return abs(z) < absa + one(real(absa))
 end
 
-function _gamma_upper_unsafe(a::T, z::T) where {T<:AbstractFloat}
+function _gamma_upper_unsafe(a::T, z::T) where {T}
     if _gamma_lower_direct(a, z)
         lower = _gamma_lower_series(a, z)
         return gamma(a) - lower
@@ -219,17 +112,7 @@ function _gamma_upper_unsafe(a::T, z::T) where {T<:AbstractFloat}
     return _gamma_upper_cf(a, z)
 end
 
-function _gamma_upper_unsafe(
-    a::Complex{T}, z::Complex{T}
-) where {T<:AbstractFloat}
-    if _gamma_lower_direct(a, z)
-        lower = _gamma_lower_series(a, z)
-        return gamma(a) - lower
-    end
-    return _gamma_upper_cf(a, z)
-end
-
-function _gamma_lower_unsafe(a::T, z::T) where {T<:AbstractFloat}
+function _gamma_lower_unsafe(a::T, z::T) where {T}
     if _gamma_lower_direct(a, z)
         return _gamma_lower_series(a, z)
     end
@@ -238,16 +121,9 @@ function _gamma_lower_unsafe(a::T, z::T) where {T<:AbstractFloat}
     return complete - upper
 end
 
-function _gamma_lower_unsafe(
-    a::Complex{T}, z::Complex{T}
-) where {T<:AbstractFloat}
-    if _gamma_lower_direct(a, z)
-        return _gamma_lower_series(a, z)
-    end
-    complete = gamma(a)
-    upper = _gamma_upper_cf(a, z)
-    return complete - upper
-end
+####################################
+## Upper incomplete gamma
+####################################
 
 _gamma(a::Float16, z::Float16) =
     Float16(_gamma(Float32(a), Float32(z)))
@@ -319,6 +195,10 @@ function _gamma(a::Complex{BigFloat}, z::Complex{BigFloat})
         end
     end
 end
+
+####################################
+## Lower incomplete gamma
+####################################
 
 _gamma_lower(a::Float16, z::Float16) =
     Float16(_gamma_lower(Float32(a), Float32(z)))
@@ -395,6 +275,121 @@ function _gamma_lower(a::Complex{BigFloat}, z::Complex{BigFloat})
             Complex{BigFloat}(BigFloat(real(value)), BigFloat(imag(value)))
         end
     end
+end
+
+####################################
+## Regularised incomplete gamma
+####################################
+
+Base.@noinline function _ig_transition_exponent(a::T, z::T) where {T}
+    ratio = z / a
+    return a * log(a) - a + a * (Base.@inline logmxp1(ratio))
+end
+
+function _ig_exponent(a::T, z::T) where {T<:AbstractFloat}
+    if a >= oftype(a, 50) && z > 0
+        if oftype(a, 0.75) * a <= z <= oftype(a, 1.25) * a
+            z == a && return a * log(a) - a
+            return _ig_transition_exponent(a, z)
+        end
+    end
+    return a * log(z) - z
+end
+
+# Adapted from SpecialFunctions.jl 2.8.0 (MIT license).
+function _gamma_inc_taylor_x(a::Float64, x::Float64)
+    l = 3.0
+    c = x
+    total = x / (a + 3.0)
+    tol = 15e-15 / (a + 1.0)
+    while true
+        l += 1.0
+        c *= -x / l
+        term = c / (a + l)
+        total += term
+        abs(term) <= tol && break
+    end
+
+    correction =
+        a * x * ((total / 6.0 - 0.5 / (a + 2.0)) * x + 1.0 / (a + 1.0))
+    exponent = a * log(x)
+
+    h = if a < 0.1
+        top = evalpoly(a, (
+            0.577215664901533, -0.409078193005776, -0.230975380857675,
+            0.0597275330452234, 0.007669681649490,
+            -0.00514889771323592, 0.000589597428611429,
+        ))
+        bottom = evalpoly(a, (
+            1.0, 0.427569613095214, 0.158451672430138,
+            0.0261132021441447, 0.00423244297896961,
+        ))
+        a * top / bottom
+    else
+        inv(gamma(a + 1.0)) - 1.0
+    end
+    inverse_gamma = 1.0 + h
+
+    if (x < 0.25 && exponent > -0.13394) || a < x / 2.59
+        power_minus_one = expm1(exponent)
+        power = 1.0 + power_minus_one
+        q = max(
+            (power * correction - power_minus_one) * inverse_gamma - h,
+            0.0,
+        )
+        return 1.0 - q, q
+    end
+
+    p = exp(exponent) * inverse_gamma * (1.0 - correction)
+    return p, 1.0 - p
+end
+
+function _gamma_lower_series_normalized(
+    a::T, z::T; maxiter::Union{Nothing,Int}=nothing
+) where {T}
+    iszero(z) && return zero(z)
+    R = typeof(real(z))
+    tol = 8 * eps(one(R))
+    cap = isnothing(maxiter) ? 50_000 : maxiter
+    term = one(z)
+    total = term
+    stable = 0
+    for n = 1:cap
+        term *= z / (a + n)
+        total += term
+        if _En_converged(term, total, zero(total), tol)
+            stable += 1
+            if stable >= 2
+                exponent = a * log(z) - z
+                gamma_argument = a + one(a)
+                return _gamma_lower_series_normalized_result(
+                    exponent, gamma_argument, total
+                )
+            end
+        else
+            stable = 0
+        end
+    end
+    throw(IncompleteGammaConvergenceError(
+        :normalized_lower_incomplete_gamma_series, cap
+    ))
+end
+
+function _gamma_lower_series_normalized_result(
+    exponent::T, gamma_argument::T, total::T
+) where {T<:AbstractFloat}
+    logabs, sign = logabsgamma(gamma_argument)
+    return sign * _En_safeexpmult(exponent - logabs, total)
+end
+
+function _gamma_lower_series_normalized_result(
+    exponent::Complex{T}, gamma_argument::Complex{T}, total::Complex{T}
+) where {T<:AbstractFloat}
+    if isreal(gamma_argument)
+        logabs, sign = logabsgamma(real(gamma_argument))
+        return sign * _En_safeexpmult(exponent - logabs, total)
+    end
+    return _En_safeexpmult(exponent - loggamma(gamma_argument), total)
 end
 
 function _gamma_inc_unsafe(a::Float64, z::Float64)

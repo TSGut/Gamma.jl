@@ -15,6 +15,10 @@ function Base.showerror(io::IO, err::IncompleteGammaConvergenceError)
           " iterations at the requested precision")
 end
 
+####################################
+## Public entry points
+####################################
+
 """
     expint(z)
     expint(ν, z)
@@ -26,8 +30,8 @@ expint(ν::T, z::T) where {T<:AbstractFloat} = _expint(ν, z, false)
 expint(ν::Complex{T}, z::Complex{T}) where {T<:AbstractFloat} =
     _expint(ν, z, false)
 function expint(ν::Number, z::Number)
-    promoted = promote(float(ν), float(z))
-    return _expint(promoted..., false)
+    ν, z = promote(float(ν), float(z))
+    return _expint(ν, z, false)
 end
 expint(z::Number) = expint(one(z), z)
 
@@ -42,13 +46,82 @@ expintx(ν::T, z::T) where {T<:AbstractFloat} = _expint(ν, z, true)
 expintx(ν::Complex{T}, z::Complex{T}) where {T<:AbstractFloat} =
     _expint(ν, z, true)
 function expintx(ν::Number, z::Number)
-    promoted = promote(float(ν), float(z))
-    return _expint(promoted..., true)
+    ν, z = promote(float(ν), float(z))
+    return _expint(ν, z, true)
 end
 expintx(z::Number) = expintx(one(z), z)
 
-# Gamma-free continued fraction for E_ν(z):
-# https://functions.wolfram.com/GammaBetaErf/ExpIntegralE/10/0001/
+####################################
+## Evaluation dispatch
+####################################
+
+_expint(ν::Float16, z::Float16, expscaled::Bool) =
+    Float16(_expint(Float32(ν), Float32(z), expscaled))
+_expint(ν::ComplexF16, z::ComplexF16, expscaled::Bool) =
+    ComplexF16(_expint(ComplexF32(ν), ComplexF32(z), expscaled))
+
+function _expint(ν::T, z::T, expscaled::Bool) where {T<:AbstractFloat}
+    if isnan(ν) || isnan(z)
+        return oftype(z, NaN) * z
+    elseif z < 0
+        throw(DomainError(z,
+            "expint has a complex value for negative z; pass complex(z)"))
+    elseif iszero(z)
+        return oftype(z, ν > 1 ? inv(ν - 1) : T(Inf))
+    elseif iszero(ν)
+        return expscaled ? inv(z) : exp(-z) / z
+    end
+    return _expint_unsafe(ν, z, expscaled)
+end
+
+function _expint(ν::Complex{T}, z::Complex{T},
+                 expscaled::Bool) where {T<:AbstractFloat}
+    if isnan(ν) || isnan(z)
+        return oftype(z, NaN) * z
+    elseif iszero(z)
+        return oftype(z, real(ν) > 1 ? inv(ν - 1) : T(Inf))
+    elseif iszero(ν)
+        return expscaled ? inv(z) : exp(-z) / z
+    end
+    return _expint_unsafe(ν, z, expscaled)
+end
+
+function _expint_unsafe(ν::T, z::T,
+                        expscaled::Bool) where {T<:AbstractFloat}
+    if abs2(z) < 9
+        positive_integer = isinteger(ν) && ν > 0
+        if !positive_integer || ν <= typemax(Int)
+            result = positive_integer ? _En_expand_origin_posint(ν, z) :
+                                        _En_expand_origin_general(ν, z)
+            return expscaled ? _En_safeexpmult(z, result) : result
+        end
+    end
+    cf, _, _ = _En_cf_nogamma(ν, z)
+    return expscaled ? cf : _En_safeexpmult(-z, cf)
+end
+
+function _expint_unsafe(ν::Complex{T}, z::Complex{T},
+                        expscaled::Bool) where {T<:AbstractFloat}
+    if abs2(z) < 9
+        realν = real(ν)
+        positive_integer = isreal(ν) && isinteger(realν) && realν > 0
+        if !positive_integer || realν <= typemax(Int)
+            result = positive_integer ? _En_expand_origin_posint(realν, z) :
+                                        _En_expand_origin_general(ν, z)
+            return expscaled ? _En_safeexpmult(z, result) : result
+        end
+    end
+    if real(z) > 0
+        cf, _, _ = _En_cf_nogamma(ν, z)
+        return expscaled ? cf : _En_safeexpmult(-z, cf)
+    end
+    return _expint_left_halfplane(ν, z, expscaled)
+end
+
+####################################
+## Shared numerical helpers
+####################################
+
 @inline function _En_converged(
     delta::T, first::T, second::T, tol
 ) where {T<:Real}
@@ -67,24 +140,37 @@ end
     return abs(delta) <= tol * max(abs(first), abs(second))
 end
 
-function _En_cf_nogamma(ν::T, z::T;
-                        maxiter::Union{Nothing,Int}=nothing,
-                        throw_on_failure::Bool=true) where {T<:AbstractFloat}
-    tol = 8 * eps(one(T))
-    cap = isnothing(maxiter) ? 50_000 : maxiter
-    return _En_cf_nogamma_recurrence(ν, z, tol, cap, throw_on_failure)
+function _En_safeexpmult(z::T, value::T) where {T<:Real}
+    ez = exp(z)
+    if isinf(ez) || iszero(ez)
+        return sign(value) * exp(z + log(abs(value)))
+    end
+    return ez * value
 end
 
-function _En_cf_nogamma(ν::Complex{T}, z::Complex{T};
-                        maxiter::Union{Nothing,Int}=nothing,
-                        throw_on_failure::Bool=true) where {T<:AbstractFloat}
-    tol = 8 * eps(one(T))
-    cap = isnothing(maxiter) ? 50_000 : maxiter
-    return _En_cf_nogamma_recurrence(ν, z, tol, cap, throw_on_failure)
+function _En_safeexpmult(
+    z::Complex{T}, value::Complex{T}
+) where {T<:AbstractFloat}
+    ez = exp(z)
+    if isinf(ez) || iszero(ez)
+        return exp(z + log(value))
+    end
+    return ez * value
 end
 
-function _En_cf_nogamma_recurrence(ν::T, z::T, tol, cap,
-                                    throw_on_failure) where {T}
+####################################
+## Continued fraction
+####################################
+
+# Gamma-free continued fraction for E_ν(z):
+# https://functions.wolfram.com/GammaBetaErf/ExpIntegralE/10/0001/
+function _En_cf_nogamma(
+    ν::T, z::T; maxiter::Union{Nothing,Int}=nothing,
+    throw_on_failure::Bool=true
+) where {T}
+    R = typeof(real(z))
+    tol = 8 * eps(one(R))
+    cap = isnothing(maxiter) ? 50_000 : maxiter
     B = z + ν
     Bprev::typeof(B) = z
     A::typeof(B) = one(B)
@@ -122,6 +208,10 @@ function _En_cf_nogamma_recurrence(ν::T, z::T, tol, cap,
         throw(IncompleteGammaConvergenceError(:expint_continued_fraction, cap))
     return A / B, cap, false
 end
+
+####################################
+## Origin expansions
+####################################
 
 function _En_expand_origin_posint(
     n, z::T; maxiter::Union{Nothing,Int}=nothing
@@ -207,6 +297,10 @@ function _En_expand_origin_general(
     throw(IncompleteGammaConvergenceError(:expint_origin_series, cap))
 end
 
+####################################
+## Left-half-plane continuation
+####################################
+
 function _En_taylor(ν::T, start::T, z0::T, delta::T;
                     maxiter::Union{Nothing,Int}=nothing) where {T}
     a = exp(z0) * start
@@ -229,24 +323,6 @@ function _En_taylor(ν::T, start::T, z0::T, delta::T;
         delta_prod_fact *= -delta / (k + 2)
     end
     throw(IncompleteGammaConvergenceError(:expint_continuation_series, cap))
-end
-
-function _En_safeexpmult(z::T, value::T) where {T<:Real}
-    ez = exp(z)
-    if isinf(ez) || iszero(ez)
-        return sign(value) * exp(z + log(abs(value)))
-    end
-    return ez * value
-end
-
-function _En_safeexpmult(
-    z::Complex{T}, value::Complex{T}
-) where {T<:AbstractFloat}
-    ez = exp(z)
-    if isinf(ez) || iszero(ez)
-        return exp(z + log(value))
-    end
-    return ez * value
 end
 
 function _expint_left_halfplane(
@@ -311,67 +387,4 @@ function _expint_left_halfplane(
         end
     end
     return expscaled ? _En_safeexpmult(original_z, result) : result
-end
-
-function _expint(ν::T, z::T, expscaled::Bool) where {T<:AbstractFloat}
-    if isnan(ν) || isnan(z)
-        return oftype(z, NaN) * z
-    elseif z < 0
-        throw(DomainError(z,
-            "expint has a complex value for negative z; pass complex(z)"))
-    elseif iszero(z)
-        return oftype(z, ν > 1 ? inv(ν - 1) : T(Inf))
-    elseif iszero(ν)
-        return expscaled ? inv(z) : exp(-z) / z
-    end
-    return _expint_unsafe(ν, z, expscaled)
-end
-
-function _expint(ν::Complex{T}, z::Complex{T},
-                 expscaled::Bool) where {T<:AbstractFloat}
-    if isnan(ν) || isnan(z)
-        return oftype(z, NaN) * z
-    elseif iszero(z)
-        return oftype(z, real(ν) > 1 ? inv(ν - 1) : T(Inf))
-    elseif iszero(ν)
-        return expscaled ? inv(z) : exp(-z) / z
-    end
-    return _expint_unsafe(ν, z, expscaled)
-end
-
-_expint(ν::Float16, z::Float16, expscaled::Bool) =
-    Float16(_expint(Float32(ν), Float32(z), expscaled))
-_expint(ν::ComplexF16, z::ComplexF16, expscaled::Bool) =
-    ComplexF16(_expint(ComplexF32(ν), ComplexF32(z), expscaled))
-
-function _expint_unsafe(ν::T, z::T,
-                        expscaled::Bool) where {T<:AbstractFloat}
-    if abs2(z) < 9
-        positive_integer = isinteger(ν) && ν > 0
-        if !positive_integer || ν <= typemax(Int)
-            result = positive_integer ? _En_expand_origin_posint(ν, z) :
-                                        _En_expand_origin_general(ν, z)
-            return expscaled ? _En_safeexpmult(z, result) : result
-        end
-    end
-    cf, _, _ = _En_cf_nogamma(ν, z)
-    return expscaled ? cf : _En_safeexpmult(-z, cf)
-end
-
-function _expint_unsafe(ν::Complex{T}, z::Complex{T},
-                        expscaled::Bool) where {T<:AbstractFloat}
-    if abs2(z) < 9
-        realν = real(ν)
-        positive_integer = isreal(ν) && isinteger(realν) && realν > 0
-        if !positive_integer || realν <= typemax(Int)
-            result = positive_integer ? _En_expand_origin_posint(realν, z) :
-                                        _En_expand_origin_general(ν, z)
-            return expscaled ? _En_safeexpmult(z, result) : result
-        end
-    end
-    if real(z) > 0
-        cf, _, _ = _En_cf_nogamma(ν, z)
-        return expscaled ? cf : _En_safeexpmult(-z, cf)
-    end
-    return _expint_left_halfplane(ν, z, expscaled)
 end

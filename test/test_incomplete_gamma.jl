@@ -456,6 +456,22 @@ end
         end
     end
 
+    for (a, z) in (
+        (1e-16, prevfloat(1.1)),
+        (0.25, prevfloat(1.1)),
+        (prevfloat(0.5), prevfloat(1.1)),
+        (0.5, 1e-300),
+        (prevfloat(1.0), 1e-300),
+    )
+        p, q = Gamma.gamma_inc(a, z)
+        p_ref, q_ref = setprecision(512) do
+            Gamma.gamma_inc(BigFloat(a), BigFloat(z))
+        end
+        use_p = abs(p_ref) <= abs(q_ref)
+        got, reference = use_p ? p : q, use_p ? p_ref : q_ref
+        @test _refmetric(BigFloat(got), reference) <= 384eps(Float64)
+    end
+
     setprecision(256) do
         a, z = big"2.5", big"1e-100"
         p, q = Gamma.gamma_inc(a, z)

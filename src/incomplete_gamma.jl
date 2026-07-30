@@ -56,6 +56,54 @@ end
 
 # Incomplete gamma
 
+# Adapted from SpecialFunctions.jl 2.8.0 (MIT license).
+function _gamma_inc_taylor_x(a::Float64, x::Float64)
+    l = 3.0
+    c = x
+    total = x / (a + 3.0)
+    tol = 15e-15 / (a + 1.0)
+    while true
+        l += 1.0
+        c *= -x / l
+        term = c / (a + l)
+        total += term
+        abs(term) <= tol && break
+    end
+
+    correction =
+        a * x * ((total / 6.0 - 0.5 / (a + 2.0)) * x + 1.0 / (a + 1.0))
+    exponent = a * log(x)
+
+    h = if a < 0.1
+        top = evalpoly(a, (
+            0.577215664901533, -0.409078193005776, -0.230975380857675,
+            0.0597275330452234, 0.007669681649490,
+            -0.00514889771323592, 0.000589597428611429,
+        ))
+        bottom = evalpoly(a, (
+            1.0, 0.427569613095214, 0.158451672430138,
+            0.0261132021441447, 0.00423244297896961,
+        ))
+        a * top / bottom
+    else
+        inv(gamma(a + 1.0)) - 1.0
+    end
+    inverse_gamma = 1.0 + h
+
+    if (x < 0.25 && exponent > -0.13394) || a < x / 2.59
+        power_minus_one = expm1(exponent)
+        power = 1.0 + power_minus_one
+        q = max(
+            (power * correction - power_minus_one) * inverse_gamma - h,
+            0.0,
+        )
+        return 1.0 - q, q
+    end
+
+    p = exp(exponent) * inverse_gamma * (1.0 - correction)
+    return p, 1.0 - p
+end
+
 function _gamma_lower_series(a::T, z::T;
                              maxiter::Union{Nothing,Int}=nothing) where {T}
     R = typeof(real(z))
@@ -347,6 +395,20 @@ function _gamma_lower(a::Complex{BigFloat}, z::Complex{BigFloat})
             Complex{BigFloat}(BigFloat(real(value)), BigFloat(imag(value)))
         end
     end
+end
+
+function _gamma_inc_unsafe(a::Float64, z::Float64)
+    if 0 < a < 1 && 0 < z < 1.1
+        return _gamma_inc_taylor_x(a, z)
+    end
+    if _gamma_lower_direct(a, z)
+        p = _gamma_lower_series_normalized(a, z)
+        return p, one(p) - p
+    end
+    ν = 1 - a
+    scaled, _, _ = _En_cf_nogamma(ν, z)
+    exponent = _ig_exponent(a, z)
+    return _gamma_inc_from_upper(a, scaled, exponent)
 end
 
 function _gamma_inc_unsafe(a::T, z::T) where {T<:AbstractFloat}
